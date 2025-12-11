@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>学生选课 · 高校选课管理平台</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #f4f3ef;
+      --panel: #ffffff;
+      --border: #e5e5e5;
+      --accent: #d97757;
+      --accent-2: #c06040;
+      --text: #1a1a1a;
+      --muted: #6b7280;
+      --danger: #d14343;
+      --success: #22a06b;
+      --shadow: 0 18px 40px rgba(0,0,0,0.08);
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: 'Manrope', 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+    }
+    header {
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 24px 20px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .logo { font-weight: 700; font-size: 18px; letter-spacing: 0.6px; }
+    .pill {
+      padding: 6px 12px;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      background: var(--panel);
+      color: var(--muted);
+      font-size: 12px;
+      letter-spacing: 0.6px;
+    }
+    .header-meta {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    main {
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 0 20px 48px;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 22px;
+    }
+    @media (max-width: 960px) {
+      main { grid-template-columns: 1fr; }
+    }
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 18px;
+      box-shadow: var(--shadow);
+    }
+    h1 {
+      margin: 0 0 8px;
+      font-size: clamp(24px, 4vw, 32px);
+      line-height: 1.2;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 12px;
+      font-size: 13px;
+    }
+    th, td {
+      text-align: left;
+      padding: 8px 10px;
+      border-bottom: 1px solid var(--border);
+      color: var(--text);
+    }
+    th { color: var(--muted); font-weight: 600; }
+    button {
+      padding: 10px 12px;
+      border-radius: 10px;
+      border: none;
+      background: linear-gradient(135deg, var(--accent), var(--accent-2));
+      color: #fff;
+      font-weight: 700;
+      letter-spacing: 0.2px;
+      cursor: pointer;
+      transition: transform 0.1s ease, box-shadow 0.2s ease, opacity 0.2s ease;
+    }
+    button.small { padding: 8px 10px; font-size: 12px; }
+    button[disabled] { opacity: 0.65; cursor: not-allowed; }
+    button:hover:not([disabled]) { transform: translateY(-1px); box-shadow: 0 10px 24px rgba(0,0,0,0.12); }
+    .hint { color: var(--muted); font-size: 13px; margin-top: 6px; }
+    .alert {
+      border-radius: 12px;
+      padding: 12px 14px;
+      border: 1px solid rgba(34,160,107,0.25);
+      background: rgba(34,160,107,0.08);
+      color: var(--success);
+      font-size: 13px;
+      margin-top: 12px;
+    }
+    .error {
+      border: 1px solid rgba(209,67,67,0.35);
+      background: rgba(209,67,67,0.08);
+      color: var(--danger);
+    }
+    .flex {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="logo">学生门户</div>
+    <div class="header-meta">
+      <div class="pill" id="termLabel">学期：-</div>
+      <div class="pill" id="userInfo"></div>
+    </div>
+  </header>
+
+  <main>
+    <section class="panel">
+      <h1>可选课程</h1>
+      <div id="selectableContainer" class="hint">加载中...</div>
+    </section>
+
+    <section class="panel">
+      <div class="flex" style="justify-content: space-between;">
+        <div>
+          <h1 style="margin-bottom:4px;">我的选课</h1>
+        </div>
+        <button id="logoutBtn" class="small">退出登录</button>
+      </div>
+      <div id="myCoursesContainer" class="hint">加载中...</div>
+      <div id="message" class="alert" style="display:none;"></div>
+    </section>
+  </main>
+
+  <script>
+    const SESSION_KEY = 'session';
+    const selectableContainer = document.getElementById('selectableContainer');
+    const myCoursesContainer = document.getElementById('myCoursesContainer');
+    const message = document.getElementById('message');
+    const logoutBtn = document.getElementById('logoutBtn');
+    const userInfo = document.getElementById('userInfo');
+    const termLabel = document.getElementById('termLabel');
+    let session = null;
+
+    function loadSession() {
+      try {
+        const raw = sessionStorage.getItem(SESSION_KEY);
+        return raw ? JSON.parse(raw) : null;
+      } catch {
+        return null;
+      }
+    }
+
+    function requireSession(expectedRole = 'STUDENT') {
+      const current = loadSession();
+      if (!current || (expectedRole && current.role !== expectedRole)) {
+        window.location.href = '/index.html';
+        return null;
+      }
+      return current;
+    }
+
+    function showMessage(text, ok = true) {
+      message.textContent = text;
+      message.style.display = 'block';
+      message.className = ok ? 'alert' : 'alert error';
+    }
+
+    async function api(url, options = {}) {
+      const res = await fetch(url, {
+        headers: { 'Content-Type': 'application/json' },
+        ...options,
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data.error || data.message || '请求失败');
+      }
+      return data;
+    }
+
+    function renderSelectable(rows) {
+      if (!rows || !rows.length) return '<div class="hint">暂无可选课程</div>';
+      return `<table><thead><tr><th>课程号</th><th>课程名</th><th>教师</th><th>容量</th><th>已选</th><th>操作</th></tr></thead><tbody>
+        ${rows.map(r => `<tr>
+          <td>${r.course_no}</td>
+          <td>${r.course_name}</td>
+          <td>${r.tea_name || '-'}</td>
+          <td>${r.capacity}</td>
+          <td>${r.selected_num}</td>
+          <td><button class="small" data-action="select" data-id="${r.course_id}">选课</button></td>
+        </tr>`).join('')}
+      </tbody></table>`;
+    }
+
+    function renderMyCourses(rows) {
+      const active = (rows || []).filter(r => r.status === '1');
+      if (!active.length) return '<div class="hint">暂无选课记录</div>';
+      return `<table><thead><tr><th>课程号</th><th>课程名</th><th>状态</th><th>选课时间</th><th>退课</th></tr></thead><tbody>
+        ${active.map(r => `<tr>
+          <td>${r.course_no}</td>
+          <td>${r.course_name}</td>
+          <td>${r.status}</td>
+          <td>${r.select_time || '-'}</td>
+          <td><button class="small" data-action="drop" data-id="${r.course_id}">退课</button></td>
+        </tr>`).join('')}
+      </tbody></table>`;
+    }
+
+    async function loadSelectable() {
+      const data = await api('/api/courses/selectable');
+      selectableContainer.innerHTML = renderSelectable(data);
+    }
+
+    async function loadMyCourses() {
+      const data = await api(`/api/courses/my?stu_id=${session.stu_id}&term=${session.term}`);
+      myCoursesContainer.innerHTML = renderMyCourses(data);
+    }
+
+    selectableContainer.addEventListener('click', async (e) => {
+      if (e.target.dataset.action === 'select') {
+        try {
+          const courseId = Number(e.target.dataset.id);
+          const res = await api('/api/select', {
+            method: 'POST',
+            body: JSON.stringify({ stu_id: session.stu_id, course_id: courseId, term: session.term }),
+          });
+          showMessage(res.message || '选课成功', res.success);
+          await loadSelectable();
+          await loadMyCourses();
+        } catch (err) {
+          showMessage(err.message, false);
+        }
+      }
+    });
+
+    myCoursesContainer.addEventListener('click', async (e) => {
+      if (e.target.dataset.action === 'drop') {
+        try {
+          const courseId = Number(e.target.dataset.id);
+          const res = await api('/api/drop', {
+            method: 'POST',
+            body: JSON.stringify({ stu_id: session.stu_id, course_id: courseId, term: session.term }),
+          });
+          showMessage(res.message || '退课成功', res.success);
+          await loadSelectable();
+          await loadMyCourses();
+        } catch (err) {
+          showMessage(err.message, false);
+        }
+      }
+    });
+
+    logoutBtn.addEventListener('click', () => {
+      sessionStorage.removeItem(SESSION_KEY);
+      window.location.href = '/index.html';
+    });
+
+    (async function init() {
+      session = requireSession('STUDENT');
+      if (!session) return;
+      userInfo.textContent = `学号ID: ${session.stu_id || '-'} / 用户ID: ${session.user_id}`;
+      termLabel.textContent = `学期：${session.term || '-'}`;
+      await loadSelectable();
+      await loadMyCourses();
+    })();
+  </script>
+</body>
+</html>

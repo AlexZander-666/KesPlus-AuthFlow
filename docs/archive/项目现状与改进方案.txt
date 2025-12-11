@@ -1,0 +1,44 @@
+项目现状与改进方案
+==================
+
+一、项目现状
+- 资产：db/01~04 SQL 脚本（表结构、触发器、存储过程、种子数据）、tests/db_trigger_procedure_tests.sql、docs 下两份实施与页面设计说明。
+- 缺失：KesPlus 前端项目导出文件、KStudio/Kingbase 数据库逻辑备份、按模板撰写的项目报告。
+- 仓库中包含 postgresql-16.4-1-windows-x64-binaries.zip 及 pgsql/、pgdata/、pglogs/ 运行目录，体积超过 300MB。
+
+二、主要问题
+1) 交付物缺口：未提交 KesPlus 导出项目、数据库逻辑备份和正式报告，无法按作业要求验收。
+2) 仓库臃肿与风险：PostgreSQL 安装包和运行数据目录被放入仓库，既超大又可能泄露本地实例数据/配置。
+3) 安全性：TB_USER 密码明文存储；学生/教师与用户的关联 USER_ID 可为空且不唯一，无法保证一人一号且角色匹配。
+4) 业务约束缺失：
+   - 课程唯一性约束为单一 COURSE_NO，无法支持同课程号跨学期开课。
+   - CAPACITY/SELECTED_NUM 无正数约束；DEPT_ID/MAJOR_ID/TEA_ID 等关键字段允许 NULL。
+5) 参数设计：TB_SYS_PARAM 用 varchar 存时间，格式错误会导致过程异常；PROC_SELECT_COURSE/PROC_DROP_COURSE 对 CURRENT_TERM 无兜底。
+6) 过程与触发器：
+   - PROC_SELECT_COURSE 未对课程行加锁，并发下容量校验可能超卖；未检查学生/教师/用户状态。
+   - 删除选课记录不会回收 SELECTED_NUM；退课时间复用 SELECT_TIME，无法区分选课/退课时间。
+7) 测试不足：现有 SQL 仅覆盖基本流程，缺少禁用用户、超时、并发、删除触发器等场景。
+8) 前端缺失：KesPlus 页面未实现，数据源/参数绑定、权限控制和前端校验均未落地，无法演示端到端流程。
+
+三、改进方案
+1) 交付物与仓库治理（P0）
+   - 从仓库移除 postgresql-16.4-1-windows-x64-binaries.zip、pgsql/、pgdata/、pglogs/，用 .gitignore 排除运行目录与大文件，保留纯脚本与文档。
+   - 在 KesPlus 实现并导出完整前端项目；用 KStudio/Kingbase 生成数据库逻辑备份 SQL；按模板补写项目报告。
+2) 数据库设计与安全（P0）
+   - TB_USER 密码改为哈希存储（如 pgcrypto/自定义函数），增加密码更新时间字段；限制 ROLE=STUDENT/TEACHER 时对应映射唯一。
+   - STUDENT/TEACHER 的 USER_ID/DEPT_ID/MAJOR_ID/TEA_ID 设 NOT NULL + UNIQUE（USER_ID），并可加 CHECK 使角色一致。
+   - TB_COURSE 增加 (COURSE_NO, TERM) 唯一约束，CAPACITY/SELECTED_NUM 增加 CHECK (CAPACITY>0 AND SELECTED_NUM>=0)。
+   - TB_SYS_PARAM 为时间类参数改用 TIMESTAMP 类型或视图，保留 CURRENT_TERM 缺省值。
+3) 存储过程与触发器（P0）
+   - PROC_SELECT_COURSE 对课程行 SELECT … FOR UPDATE，再做容量校验；校验 TB_STUDENT.STATUS、TB_TEACHER.STATUS、TB_USER.STATUS；p_term 为空时用 CURRENT_TERM。
+   - 新增 BEFORE DELETE 触发器在 STATUS='1' 时回收 SELECTED_NUM；区分 SELECT_TIME/DROP_TIME 字段或新增 DROP_TIME。
+   - 在过程里使用异常处理，统一返回编码与消息，便于前端提示。
+4) KesPlus 前端落地（P0）
+   - 按 docs/KesPlus_页面与数据源设计.txt 建立登录、主界面、学生/教师/课程管理、选课、退课、统计等页面与数据源。
+   - 按钮事件调用存储过程，绑定查询参数，默认学期取 TB_SYS_PARAM.CURRENT_TERM；做前端必填/状态校验，角色鉴权控制菜单与按钮。
+5) 测试与验收（P0）
+   - 扩充 SQL 用例：禁用用户/教师/学生选课失败、课程停开、容量并发占满、退课超时、删除记录触发器回收、跨学期课程重复、哈希密码校验。
+   - 前端联调：用三个角色账号覆盖登录、增删改、选退课、统计导出等主流程，记录截图用于报告。
+6) 提交与运维（P1）
+   - 编写运行说明（数据库初始化、KesPlus 部署、测试执行）；在压缩包内分目录放置前端导出、DB 备份、报告。
+   - 预留基础监控/日志指引（选课/退课失败日志位置、常见错误排查）。
