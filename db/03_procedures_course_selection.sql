@@ -1,6 +1,7 @@
 -- Stored procedures and helper functions for course selection (Kingbase/PostgreSQL compatible)
 
 -- Cleanup
+DROP FUNCTION IF EXISTS FN_HASH_PASSWORD(TEXT);
 DROP FUNCTION IF EXISTS FN_VERIFY_PASSWORD(TEXT, TEXT);
 DROP FUNCTION IF EXISTS FN_LOGIN(TEXT, TEXT);
 DROP PROCEDURE IF EXISTS PROC_SET_PASSWORD(INT, TEXT, BOOLEAN, TEXT);
@@ -8,7 +9,22 @@ DROP PROCEDURE IF EXISTS PROC_SELECT_COURSE(INT, INT, VARCHAR, BOOLEAN, TEXT);
 DROP PROCEDURE IF EXISTS PROC_DROP_COURSE(INT, INT, VARCHAR, BOOLEAN, TEXT);
 DROP FUNCTION IF EXISTS PROC_STAT_COURSE_SELECT(VARCHAR);
 
--- Password verification with md5
+-- Salted password hashing (backward-compatible with legacy md5 hashes)
+CREATE OR REPLACE FUNCTION FN_HASH_PASSWORD(
+    p_plain_password TEXT
+) RETURNS TEXT
+AS $$
+DECLARE
+    v_salt TEXT := substr(md5(random()::text || clock_timestamp()::text), 1, 16);
+BEGIN
+    IF p_plain_password IS NULL OR LENGTH(TRIM(p_plain_password)) = 0 THEN
+        RETURN NULL;
+    END IF;
+    RETURN v_salt || ':' || md5(v_salt || '|' || TRIM(p_plain_password));
+END;
+$$ LANGUAGE plpgsql;
+
+-- Password verification with salt support; falls back to legacy md5(plain) if no salt stored
 CREATE OR REPLACE FUNCTION FN_VERIFY_PASSWORD(
     p_username TEXT,
     p_plain_password TEXT
@@ -16,12 +32,27 @@ CREATE OR REPLACE FUNCTION FN_VERIFY_PASSWORD(
 AS $$
 DECLARE
     v_hash TEXT;
+    v_salt TEXT;
+    v_expected TEXT;
 BEGIN
     SELECT PASSWORD_HASH INTO v_hash FROM TB_USER WHERE USERNAME = p_username;
     IF NOT FOUND THEN
         RETURN FALSE;
     END IF;
-    RETURN md5(p_plain_password) = v_hash;
+
+    -- Legacy hash (no salt)
+    IF POSITION(':' IN v_hash) = 0 THEN
+        RETURN md5(p_plain_password) = v_hash;
+    END IF;
+
+    v_salt := split_part(v_hash, ':', 1);
+    v_expected := split_part(v_hash, ':', 2);
+
+    IF v_salt IS NULL OR v_expected IS NULL OR v_expected = '' THEN
+        RETURN FALSE;
+    END IF;
+
+    RETURN md5(v_salt || '|' || p_plain_password) = v_expected;
 END;
 $$ LANGUAGE plpgsql;
 
@@ -79,7 +110,7 @@ BEGIN
     END IF;
 
     UPDATE TB_USER
-    SET PASSWORD_HASH = md5(TRIM(p_plain_password)),
+    SET PASSWORD_HASH = FN_HASH_PASSWORD(TRIM(p_plain_password)),
         PASSWORD_UPDATED_AT = CURRENT_TIMESTAMP
     WHERE USER_ID = p_user_id;
 
@@ -124,7 +155,14 @@ BEGIN
     p_success := FALSE;
     p_message := '';
 
-    SELECT COALESCE(NULLIF(TRIM(p_term), ''), (SELECT PARAM_VALUE FROM TB_SYS_PARAM WHERE PARAM_KEY = 'CURRENT_TERM')) INTO v_term;
+    SELECT COALESCE(
+               NULLIF(TRIM(p_term), ''),
+               (SELECT PARAM_VALUE FROM TB_SYS_PARAM WHERE PARAM_KEY = 'CURRENT_TERM' AND PARAM_VALUE IS NOT NULL)
+           )
+    INTO v_term;
+    IF v_term IS NULL THEN
+        SELECT TERM INTO v_term FROM TB_COURSE WHERE COURSE_ID = p_course_id;
+    END IF;
     IF v_term IS NULL THEN
         p_message := 'term missing';
         RETURN;
@@ -203,7 +241,7 @@ BEGIN
 
     IF FOUND THEN
         IF v_existing_status = '1' THEN
-            p_message := '课程已选上';
+            p_message := 'course already selected';
             RETURN;
         ELSE
             UPDATE TB_STUDENT_COURSE
@@ -248,7 +286,14 @@ BEGIN
     p_success := FALSE;
     p_message := '';
 
-    SELECT COALESCE(NULLIF(TRIM(p_term), ''), (SELECT PARAM_VALUE FROM TB_SYS_PARAM WHERE PARAM_KEY = 'CURRENT_TERM')) INTO v_term;
+    SELECT COALESCE(
+               NULLIF(TRIM(p_term), ''),
+               (SELECT PARAM_VALUE FROM TB_SYS_PARAM WHERE PARAM_KEY = 'CURRENT_TERM' AND PARAM_VALUE IS NOT NULL)
+           )
+    INTO v_term;
+    IF v_term IS NULL THEN
+        SELECT TERM INTO v_term FROM TB_COURSE WHERE COURSE_ID = p_course_id;
+    END IF;
     IF v_term IS NULL THEN
         p_message := 'term missing';
         RETURN;
@@ -312,7 +357,11 @@ RETURNS TABLE (
 DECLARE
     v_term VARCHAR(20);
 BEGIN
-    SELECT COALESCE(NULLIF(TRIM(p_term), ''), (SELECT PARAM_VALUE FROM TB_SYS_PARAM WHERE PARAM_KEY = 'CURRENT_TERM')) INTO v_term;
+    SELECT COALESCE(
+               NULLIF(TRIM(p_term), ''),
+               (SELECT PARAM_VALUE FROM TB_SYS_PARAM WHERE PARAM_KEY = 'CURRENT_TERM' AND PARAM_VALUE IS NOT NULL)
+           )
+    INTO v_term;
     IF v_term IS NULL THEN
         RAISE EXCEPTION 'term missing';
     END IF;

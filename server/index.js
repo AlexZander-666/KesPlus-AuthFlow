@@ -2,12 +2,16 @@ import express from 'express';
 import cors from 'cors';
 import morgan from 'morgan';
 import path from 'path';
+import crypto from 'crypto';
 import { fileURLToPath } from 'url';
 import 'dotenv/config';
 import { pool, testConnection } from './db.js';
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+const DEFAULT_TERM = (process.env.DEFAULT_TERM || '').trim() || null;
+const AUTH_SECRET = (process.env.AUTH_SECRET || 'dev-secret-change-me').trim();
+const ALLOWED_PROCEDURES = new Set(['FN_SELECT_COURSE', 'FN_DROP_COURSE']);
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const webDir = path.join(__dirname, '..', 'web');
@@ -15,10 +19,83 @@ const webDir = path.join(__dirname, '..', 'web');
 app.use(cors({ origin: ['http://localhost:3000', 'http://127.0.0.1:3000', 'http://localhost:5173', 'http://127.0.0.1:5173'] }));
 app.use(express.json());
 app.use(morgan('dev'));
+app.use('/res', express.static(path.join(__dirname, '..', 'res')));
 app.use(express.static(webDir));
 
 app.get('/health', (_req, res) => {
   res.json({ status: 'ok' });
+});
+
+function signToken(payload) {
+  const body = Buffer.from(JSON.stringify(payload)).toString('base64url');
+  const sig = crypto.createHmac('sha256', AUTH_SECRET).update(body).digest('base64url');
+  return `${body}.${sig}`;
+}
+
+function verifyToken(token) {
+  if (!token || typeof token !== 'string' || !token.includes('.')) {
+    throw new Error('invalid token');
+  }
+  const [body, sig] = token.split('.');
+  const expected = crypto.createHmac('sha256', AUTH_SECRET).update(body).digest('base64url');
+  if (expected !== sig) {
+    throw new Error('invalid signature');
+  }
+  const json = Buffer.from(body, 'base64url').toString('utf8');
+  return JSON.parse(json);
+}
+
+function requireAuth(roles = []) {
+  return (req, res, next) => {
+    const header = req.headers.authorization || '';
+    const token = header.startsWith('Bearer ') ? header.slice(7) : null;
+    if (!token) return res.status(401).json({ error: 'unauthorized' });
+    try {
+      const payload = verifyToken(token);
+      if (roles.length && !roles.includes(payload.role)) {
+        return res.status(403).json({ error: 'forbidden' });
+      }
+      req.auth = payload;
+      next();
+    } catch (err) {
+      return res.status(401).json({ error: 'unauthorized' });
+    }
+  };
+}
+
+async function getCurrentTerm() {
+  try {
+    const { rows } = await pool.query("SELECT param_value AS term FROM tb_sys_param WHERE param_key = 'CURRENT_TERM' LIMIT 1;");
+    return rows[0]?.term || null;
+  } catch (err) {
+    console.error('[term] failed to load CURRENT_TERM', err);
+    throw new Error('failed to load current term');
+  }
+}
+
+async function resolveTerm(providedTerm) {
+  const term = (providedTerm ?? '').toString().trim();
+  if (term) return term;
+
+  const current = await getCurrentTerm();
+  if (current) return current;
+
+  if (DEFAULT_TERM) {
+    console.warn('[term] CURRENT_TERM missing, using DEFAULT_TERM fallback');
+    return DEFAULT_TERM;
+  }
+
+  throw new Error('current term not configured');
+}
+
+app.get('/api/config/term', async (_req, res) => {
+  try {
+    const term = await resolveTerm();
+    return res.json({ term });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: err.message || 'failed to fetch term' });
+  }
 });
 
 // Login: use FN_LOGIN (status checked in DB)
@@ -28,12 +105,33 @@ app.post('/api/login', async (req, res) => {
     return res.status(400).json({ error: 'missing credentials' });
   }
   try {
-    const { rows } = await pool.query('SELECT * FROM FN_LOGIN($1,$2);', [username, password]);
+    const { rows } = await pool.query(
+      'SELECT user_id, username, role, status, stu_id, tea_id FROM FN_LOGIN($1,$2);',
+      [username, password]
+    );
     if (!rows.length || rows[0].status !== '1') {
       return res.status(401).json({ error: 'invalid credentials or disabled' });
     }
     const { user_id, role, stu_id, tea_id } = rows[0];
-    return res.json({ user_id, role, stu_id, tea_id });
+    const term = await resolveTerm();
+    const token = signToken({ user_id, role, stu_id, tea_id, username, term, ts: Date.now() });
+    const extra = {};
+    if (role === 'STUDENT' && stu_id) {
+      try {
+        const { rows: stuRows } = await pool.query(
+          'SELECT stu_name, stu_no FROM tb_student WHERE stu_id = $1;',
+          [stu_id]
+        );
+        if (stuRows[0]) {
+          extra.stu_name = stuRows[0].stu_name;
+          extra.stu_no = stuRows[0].stu_no;
+          extra.real_name = stuRows[0].stu_name;
+        }
+      } catch (err) {
+        console.warn('[login] failed to load student profile', err?.message || err);
+      }
+    }
+    return res.json({ user_id, role, stu_id, tea_id, term, token, ...extra });
   } catch (e) {
     console.error(e);
     return res.status(500).json({ error: 'login failed' });
@@ -42,8 +140,8 @@ app.post('/api/login', async (req, res) => {
 
 // Selectable courses
 app.get('/api/courses/selectable', async (req, res) => {
-  const term = req.query.term || '2024-2025-1';
   try {
+    const term = await resolveTerm(req.query.term);
     const sql = `
       SELECT c.course_id, c.course_no, c.course_name, c.credit, c.capacity, c.selected_num, c.term, t.tea_name
       FROM tb_course c
@@ -59,11 +157,14 @@ app.get('/api/courses/selectable', async (req, res) => {
 });
 
 // My courses
-app.get('/api/courses/my', async (req, res) => {
+app.get('/api/courses/my', requireAuth(['STUDENT']), async (req, res) => {
   const stu_id = Number(req.query.stu_id);
-  const term = req.query.term || '2024-2025-1';
   if (!stu_id) return res.status(400).json({ error: 'missing stu_id' });
+  if (!req.auth || req.auth.role !== 'STUDENT' || req.auth.stu_id !== stu_id) {
+    return res.status(403).json({ error: 'forbidden' });
+  }
   try {
+    const term = await resolveTerm(req.query.term);
     const sql = `
       SELECT sc.course_id, c.course_no, c.course_name, c.credit, sc.status, sc.select_time, sc.drop_time
       FROM tb_student_course sc
@@ -77,19 +178,68 @@ app.get('/api/courses/my', async (req, res) => {
   }
 });
 
+// Student profile (basic)
+app.get('/api/students/:stu_id', requireAuth(['STUDENT']), async (req, res) => {
+  const stu_id = Number(req.params.stu_id);
+  if (!stu_id) return res.status(400).json({ error: 'invalid stu_id' });
+  if (!req.auth || req.auth.role !== 'STUDENT' || req.auth.stu_id !== stu_id) {
+    return res.status(403).json({ error: 'forbidden' });
+  }
+  try {
+    const sql = `
+      SELECT s.stu_id,
+             s.stu_no,
+             s.stu_name,
+             s.status AS stu_status,
+             u.user_id,
+             u.username,
+             u.real_name,
+             u.status AS user_status
+      FROM tb_student s
+      JOIN tb_user u ON s.user_id = u.user_id
+      WHERE s.stu_id = $1;
+    `;
+    const { rows } = await pool.query(sql, [stu_id]);
+    if (!rows.length) return res.status(404).json({ error: 'student not found' });
+    const row = rows[0];
+    if (row.stu_status !== '1' || row.user_status !== '1') {
+      return res.status(403).json({ error: 'student disabled' });
+    }
+    return res.json({
+      stu_id: row.stu_id,
+      stu_no: row.stu_no,
+      stu_name: row.stu_name,
+      username: row.username,
+      real_name: row.real_name,
+      user_id: row.user_id,
+    });
+  } catch (e) {
+    console.error(e);
+    return res.status(500).json({ error: 'fetch student failed' });
+  }
+});
+
 async function callProcedure(procName, args = []) {
+  const normalizedName = (procName || '').toString().toUpperCase();
+  if (!ALLOWED_PROCEDURES.has(normalizedName)) {
+    throw new Error('procedure not allowed');
+  }
   const placeholders = args.map((_, i) => `$${i + 1}`).join(',');
-  const sql = `SELECT * FROM ${procName}(${placeholders});`;
+  const sql = `SELECT * FROM ${normalizedName}(${placeholders});`;
   const { rows } = await pool.query(sql, args);
   return rows[0] || { success: false, message: 'no response' };
 }
 
 // Select course
-app.post('/api/select', async (req, res) => {
+app.post('/api/select', requireAuth(['STUDENT']), async (req, res) => {
   const { stu_id, course_id, term } = req.body || {};
   if (!stu_id || !course_id) return res.status(400).json({ error: 'missing stu_id or course_id' });
+  if (!req.auth || req.auth.role !== 'STUDENT' || req.auth.stu_id !== stu_id) {
+    return res.status(403).json({ error: 'forbidden' });
+  }
   try {
-    const result = await callProcedure('FN_SELECT_COURSE', [stu_id, course_id, term || null]);
+    const resolvedTerm = await resolveTerm(term);
+    const result = await callProcedure('FN_SELECT_COURSE', [stu_id, course_id, resolvedTerm]);
     return res.status(result.success ? 200 : 400).json(result);
   } catch (e) {
     console.error(e);
@@ -98,11 +248,15 @@ app.post('/api/select', async (req, res) => {
 });
 
 // Drop course
-app.post('/api/drop', async (req, res) => {
+app.post('/api/drop', requireAuth(['STUDENT']), async (req, res) => {
   const { stu_id, course_id, term } = req.body || {};
   if (!stu_id || !course_id) return res.status(400).json({ error: 'missing stu_id or course_id' });
+  if (!req.auth || req.auth.role !== 'STUDENT' || req.auth.stu_id !== stu_id) {
+    return res.status(403).json({ error: 'forbidden' });
+  }
   try {
-    const result = await callProcedure('FN_DROP_COURSE', [stu_id, course_id, term || null]);
+    const resolvedTerm = await resolveTerm(term);
+    const result = await callProcedure('FN_DROP_COURSE', [stu_id, course_id, resolvedTerm]);
     return res.status(result.success ? 200 : 400).json(result);
   } catch (e) {
     console.error(e);
@@ -111,9 +265,9 @@ app.post('/api/drop', async (req, res) => {
 });
 
 // Statistics
-app.get('/api/stat', async (req, res) => {
-  const term = req.query.term || '2024-2025-1';
+app.get('/api/stat', requireAuth(['TEACHER', 'ADMIN']), async (req, res) => {
   try {
+    const term = await resolveTerm(req.query.term);
     const { rows } = await pool.query('SELECT * FROM PROC_STAT_COURSE_SELECT($1);', [term]);
     return res.json(rows);
   } catch (e) {
@@ -130,5 +284,10 @@ app.use((req, res) => res.status(404).json({ error: 'not found' }));
 
 app.listen(PORT, async () => {
   console.log(`[api] listening on http://localhost:${PORT}`);
-  await testConnection();
+  try {
+    await testConnection();
+  } catch (err) {
+    console.error('[db] connection test failed', err?.message || err);
+    process.exit(1);
+  }
 });

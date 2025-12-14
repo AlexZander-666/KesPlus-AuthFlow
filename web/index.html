@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>高校选课管理平台 · 登录</title>
+  <title>同济选课管理平台 · 登录</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700&display=swap" rel="stylesheet">
@@ -44,6 +44,11 @@
       gap: 10px;
       font-size: 18px;
     }
+    .emblem {
+      height: 60px;
+      width: auto;
+      object-fit: contain;
+    }
     .pill {
       padding: 6px 12px;
       border-radius: 999px;
@@ -71,6 +76,14 @@
       font-size: clamp(26px, 4vw, 34px);
       line-height: 1.2;
       color: var(--text);
+      text-align: center;
+    }
+    .logo-mark {
+      display: block;
+      width: 100%;
+      max-width: 420px;
+      height: auto;
+      margin: 0 auto;
     }
     form {
       display: grid;
@@ -128,13 +141,15 @@
 </head>
 <body>
   <header>
-    <div class="logo">高校选课管理平台</div>
-    <div class="pill">登录入口</div>
+    <div class="logo">同济选课管理平台</div>
+    <img src="/res/img/校徽.png" alt="同济大学校徽" class="emblem">
   </header>
 
   <main>
     <section class="panel">
-      <h1>同济学生课程平台</h1>
+      <h1>
+        <img src="/res/img/校名.png" alt="同济学生课程平台" class="logo-mark">
+      </h1>
       <form id="loginForm">
         <div>
           <label for="username">用户名</label>
@@ -152,10 +167,19 @@
 
   <script>
     const SESSION_KEY = 'session';
-    const TERM_DEFAULT = '2024-2025-1';
     const form = document.getElementById('loginForm');
     const result = document.getElementById('loginResult');
     const submitBtn = document.getElementById('submitBtn');
+
+    async function fetchCurrentTerm() {
+      try {
+        const res = await fetch('/api/config/term');
+        const data = await res.json().catch(() => ({}));
+        return data.term || null;
+      } catch {
+        return null;
+      }
+    }
 
     function getRedirectPath(role) {
       if (role === 'ADMIN') return '/admin.html';
@@ -195,9 +219,15 @@
       return data;
     }
 
-    function redirectIfLoggedIn() {
+    async function redirectIfLoggedIn() {
       const current = loadSession();
       if (current?.role) {
+        if (!current.term) {
+          const term = await fetchCurrentTerm();
+          if (term) {
+            saveSession({ ...current, term });
+          }
+        }
         window.location.href = getRedirectPath(current.role);
       }
     }
@@ -213,7 +243,11 @@
       submitBtn.textContent = '正在登录...';
       try {
         const data = await apiLogin(username, password);
-        const session = { ...data, username, term: TERM_DEFAULT };
+        let term = data.term;
+        if (!term) {
+          term = await fetchCurrentTerm();
+        }
+        const session = { ...data, username, term: term || null };
         saveSession(session);
         showMessage(`登录成功，角色=${data.role}，即将跳转`, true);
         window.location.href = getRedirectPath(data.role);

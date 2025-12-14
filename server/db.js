@@ -18,11 +18,15 @@ export const pool = new Pool({
 });
 
 export async function testConnection() {
-  const client = await pool.connect();
+  let client;
   try {
+    client = await pool.connect();
     const { rows } = await client.query('SELECT current_database() AS db, current_user AS user');
     console.log(`[db] connected to ${rows[0].db} as ${rows[0].user}`);
+  } catch (err) {
+    console.error('[db] connection test failed', err?.message || err);
+    throw err;
   } finally {
-    client.release();
+    if (client) client.release();
   }
 }

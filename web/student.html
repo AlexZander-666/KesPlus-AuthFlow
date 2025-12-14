@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>学生选课 · 高校选课管理平台</title>
+  <title>学生选课 · 同济选课管理平台</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700&display=swap" rel="stylesheet">
@@ -37,30 +37,13 @@
       justify-content: space-between;
     }
     .logo { font-weight: 700; font-size: 18px; letter-spacing: 0.6px; }
-    .pill {
-      padding: 6px 12px;
-      border-radius: 999px;
-      border: 1px solid var(--border);
-      background: var(--panel);
-      color: var(--muted);
-      font-size: 12px;
-      letter-spacing: 0.6px;
-    }
-    .header-meta {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-    }
     main {
       max-width: 1100px;
       margin: 0 auto;
       padding: 0 20px 48px;
       display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 22px;
-    }
-    @media (max-width: 960px) {
-      main { grid-template-columns: 1fr; }
+      grid-template-columns: 1fr;
+      gap: 18px;
     }
     .panel {
       background: var(--panel);
@@ -122,33 +105,100 @@
       gap: 12px;
       flex-wrap: wrap;
     }
+    .grid {
+      display: grid;
+      gap: 16px;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      align-items: stretch;
+    }
+    .card {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      padding: 14px 16px;
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      background: linear-gradient(180deg, #fdfcf9 0%, #f7f5f1 100%);
+      color: var(--text);
+      font-size: 13px;
+      box-shadow: 0 10px 24px rgba(0,0,0,0.04);
+    }
+    .card-label {
+      font-size: 12px;
+      letter-spacing: 0.8px;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+    .card-value {
+      font-size: 18px;
+      font-weight: 700;
+      color: var(--text);
+      line-height: 1.3;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    .pill-value {
+      display: inline-flex;
+      align-items: center;
+      padding: 8px 12px;
+      border-radius: 12px;
+      background: #fff7f3;
+      color: var(--accent-2);
+      border: 1px solid rgba(192,96,64,0.35);
+      font-weight: 700;
+      font-size: 16px;
+      letter-spacing: 0.3px;
+      box-shadow: 0 6px 16px rgba(0,0,0,0.05);
+    }
+    .two-col {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+      gap: 22px;
+    }
   </style>
 </head>
 <body>
   <header>
     <div class="logo">学生门户</div>
-    <div class="header-meta">
-      <div class="pill" id="termLabel">学期：-</div>
-      <div class="pill" id="userInfo"></div>
-    </div>
   </header>
 
   <main>
     <section class="panel">
-      <h1>可选课程</h1>
-      <div id="selectableContainer" class="hint">加载中...</div>
+      <div class="grid">
+        <div class="card">
+          <div class="card-label">学期</div>
+          <div class="card-value"><span class="pill-value" id="termLabel">-</span></div>
+        </div>
+        <div class="card">
+          <div class="card-label">账号</div>
+          <div class="card-value"><span class="pill-value" id="userInfo">-</span></div>
+        </div>
+        <div class="card">
+          <div class="card-label">姓名</div>
+          <div class="card-value"><span class="pill-value" id="studentName">-</span></div>
+        </div>
+      </div>
     </section>
 
-    <section class="panel">
-      <div class="flex" style="justify-content: space-between;">
-        <div>
-          <h1 style="margin-bottom:4px;">我的选课</h1>
+    <div class="two-col">
+      <section class="panel">
+        <h1>可选课程</h1>
+        <div id="selectableContainer" class="hint">加载中...</div>
+      </section>
+
+      <section class="panel">
+        <div class="flex" style="justify-content: space-between;">
+          <div>
+            <h1 style="margin-bottom:4px;">我的选课</h1>
+          </div>
+          <button id="logoutBtn" class="small">退出登录</button>
         </div>
-        <button id="logoutBtn" class="small">退出登录</button>
-      </div>
-      <div id="myCoursesContainer" class="hint">加载中...</div>
-      <div id="message" class="alert" style="display:none;"></div>
-    </section>
+        <div id="myCoursesContainer" class="hint">加载中...</div>
+        <div id="message" class="alert" style="display:none;"></div>
+      </section>
+    </div>
   </main>
 
   <script>
@@ -158,8 +208,13 @@
     const message = document.getElementById('message');
     const logoutBtn = document.getElementById('logoutBtn');
     const userInfo = document.getElementById('userInfo');
+    const studentName = document.getElementById('studentName');
     const termLabel = document.getElementById('termLabel');
     let session = null;
+
+    function saveSession(payload) {
+      sessionStorage.setItem(SESSION_KEY, JSON.stringify(payload));
+    }
 
     function loadSession() {
       try {
@@ -172,11 +227,31 @@
 
     function requireSession(expectedRole = 'STUDENT') {
       const current = loadSession();
-      if (!current || (expectedRole && current.role !== expectedRole)) {
+      if (!current || !current.token || (expectedRole && current.role !== expectedRole)) {
         window.location.href = '/index.html';
         return null;
       }
       return current;
+    }
+
+    async function fetchCurrentTerm() {
+      try {
+        const data = await api('/api/config/term');
+        return data.term || null;
+      } catch {
+        return null;
+      }
+    }
+
+    async function ensureTerm() {
+      if (session?.term) return session.term;
+      const term = await fetchCurrentTerm();
+      if (term) {
+        session = { ...session, term };
+        saveSession(session);
+        termLabel.textContent = term;
+      }
+      return session?.term || null;
     }
 
     function showMessage(text, ok = true) {
@@ -186,8 +261,12 @@
     }
 
     async function api(url, options = {}) {
+      const headers = {
+        'Content-Type': 'application/json',
+        ...(session?.token ? { Authorization: `Bearer ${session.token}` } : {}),
+      };
       const res = await fetch(url, {
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         ...options,
       });
       const data = await res.json().catch(() => ({}));
@@ -226,22 +305,54 @@
     }
 
     async function loadSelectable() {
-      const data = await api('/api/courses/selectable');
+      const term = await ensureTerm();
+      const url = term ? `/api/courses/selectable?term=${encodeURIComponent(term)}` : '/api/courses/selectable';
+      const data = await api(url);
       selectableContainer.innerHTML = renderSelectable(data);
     }
 
     async function loadMyCourses() {
-      const data = await api(`/api/courses/my?stu_id=${session.stu_id}&term=${session.term}`);
+      const term = await ensureTerm();
+      const params = new URLSearchParams({ stu_id: session.stu_id });
+      if (term) params.set('term', term);
+      const data = await api(`/api/courses/my?${params.toString()}`);
       myCoursesContainer.innerHTML = renderMyCourses(data);
+    }
+
+    async function loadStudentProfile() {
+      const fallbackName = session?.stu_name || session?.real_name || '-';
+      const fallbackAccount = session?.stu_no || session?.username || session?.user_id || '-';
+      if (!session?.stu_id) {
+        userInfo.textContent = fallbackAccount;
+        studentName.textContent = fallbackName;
+        showMessage('未找到学生ID，重新登录以刷新信息', false);
+        return;
+      }
+      try {
+        const data = await api(`/api/students/${session.stu_id}`);
+        const displayName = data.stu_name || data.real_name || fallbackName;
+        const stuNo = data.stu_no || session.stu_no || session.stu_id;
+        userInfo.textContent = stuNo || data.user_id || session.user_id || '-';
+        studentName.textContent = displayName || '-';
+        session = { ...session, stu_no: data.stu_no, stu_name: data.stu_name, real_name: data.real_name };
+        saveSession(session);
+      } catch (err) {
+        userInfo.textContent = session.stu_id || session.username || session.user_id || '-';
+        studentName.textContent = fallbackName;
+        showMessage(err?.message || '加载学生信息失败', false);
+      }
     }
 
     selectableContainer.addEventListener('click', async (e) => {
       if (e.target.dataset.action === 'select') {
         try {
           const courseId = Number(e.target.dataset.id);
+          const term = await ensureTerm();
+          const payload = { stu_id: session.stu_id, course_id: courseId };
+          if (term) payload.term = term;
           const res = await api('/api/select', {
             method: 'POST',
-            body: JSON.stringify({ stu_id: session.stu_id, course_id: courseId, term: session.term }),
+            body: JSON.stringify(payload),
           });
           showMessage(res.message || '选课成功', res.success);
           await loadSelectable();
@@ -256,9 +367,12 @@
       if (e.target.dataset.action === 'drop') {
         try {
           const courseId = Number(e.target.dataset.id);
+          const term = await ensureTerm();
+          const payload = { stu_id: session.stu_id, course_id: courseId };
+          if (term) payload.term = term;
           const res = await api('/api/drop', {
             method: 'POST',
-            body: JSON.stringify({ stu_id: session.stu_id, course_id: courseId, term: session.term }),
+            body: JSON.stringify(payload),
           });
           showMessage(res.message || '退课成功', res.success);
           await loadSelectable();
@@ -277,8 +391,12 @@
     (async function init() {
       session = requireSession('STUDENT');
       if (!session) return;
-      userInfo.textContent = `学号ID: ${session.stu_id || '-'} / 用户ID: ${session.user_id}`;
-      termLabel.textContent = `学期：${session.term || '-'}`;
+      await loadStudentProfile();
+      if (session.term) {
+        termLabel.textContent = session.term;
+      }
+      await ensureTerm();
+      termLabel.textContent = session.term || '-';
       await loadSelectable();
       await loadMyCourses();
     })();

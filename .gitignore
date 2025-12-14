@@ -18,3 +18,7 @@ node_modules/
 # Ignore generated server logs
 server/node.err.log
 server/node.out.log
+
+# Environment secrets (commit example only)
+.env
+*/.env
