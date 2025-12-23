@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>同济选课管理平台 · 登录</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #f4f3ef;
+      --panel: #ffffff;
+      --border: #e5e5e5;
+      --accent: #d97757;
+      --accent-2: #c06040;
+      --text: #1a1a1a;
+      --muted: #6b7280;
+      --danger: #d14343;
+      --success: #22a06b;
+      --shadow: 0 18px 40px rgba(0,0,0,0.08);
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: 'Manrope', 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+    }
+    header {
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 28px 20px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .logo {
+      font-weight: 700;
+      letter-spacing: 0.6px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 18px;
+    }
+    .emblem {
+      height: 60px;
+      width: auto;
+      object-fit: contain;
+    }
+    .pill {
+      padding: 6px 12px;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      background: var(--panel);
+      color: var(--muted);
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.6px;
+    }
+    main {
+      max-width: 460px;
+      margin: 0 auto;
+      padding: 0 20px 48px;
+    }
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 22px;
+      box-shadow: var(--shadow);
+    }
+    h1 {
+      margin: 0 0 12px;
+      font-size: clamp(26px, 4vw, 34px);
+      line-height: 1.2;
+      color: var(--text);
+      text-align: center;
+    }
+    .logo-mark {
+      display: block;
+      width: 100%;
+      max-width: 420px;
+      height: auto;
+      margin: 0 auto;
+    }
+    form {
+      display: grid;
+      gap: 14px;
+      margin-top: 6px;
+    }
+    label {
+      font-size: 13px;
+      color: var(--muted);
+      display: block;
+      margin-bottom: 6px;
+    }
+    input {
+      width: 100%;
+      padding: 12px 14px;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      background: #fdfcfb;
+      color: var(--text);
+      font-size: 14px;
+    }
+    input:focus {
+      outline: 1px solid var(--accent);
+      box-shadow: 0 0 0 3px rgba(217,119,87,0.18);
+    }
+    button {
+      padding: 12px 16px;
+      border-radius: 10px;
+      border: none;
+      background: linear-gradient(135deg, var(--accent), var(--accent-2));
+      color: #fff;
+      font-weight: 700;
+      letter-spacing: 0.2px;
+      cursor: pointer;
+      transition: transform 0.1s ease, box-shadow 0.2s ease, opacity 0.2s ease;
+    }
+    button[disabled] { opacity: 0.65; cursor: not-allowed; }
+    button:hover:not([disabled]) { transform: translateY(-1px); box-shadow: 0 12px 30px rgba(0,0,0,0.12); }
+    .alert {
+      border-radius: 12px;
+      padding: 12px 14px;
+      border: 1px solid rgba(34,160,107,0.25);
+      background: rgba(34,160,107,0.08);
+      color: var(--success);
+      font-size: 13px;
+      margin-top: 12px;
+    }
+    .error {
+      border: 1px solid rgba(209,67,67,0.35);
+      background: rgba(209,67,67,0.08);
+      color: var(--danger);
+    }
+    code { background: #f5f3f0; padding: 2px 6px; border-radius: 6px; }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="logo">同济选课管理平台</div>
+    <img src="/res/img/校徽.png" alt="同济大学校徽" class="emblem">
+  </header>
+
+  <main>
+    <section class="panel">
+      <h1>
+        <img src="/res/img/校名.png" alt="同济学生课程平台" class="logo-mark">
+      </h1>
+      <form id="loginForm">
+        <div>
+          <label for="username">用户名</label>
+          <input id="username" name="username" placeholder="admin / t001 / s001" autocomplete="username" required>
+        </div>
+        <div>
+          <label for="password">密码</label>
+          <input id="password" name="password" type="password" placeholder="******" autocomplete="current-password" required>
+        </div>
+        <button type="submit" id="submitBtn">登录</button>
+        <div id="loginResult" class="alert" style="display:none;"></div>
+      </form>
+    </section>
+  </main>
+
+  <script>
+    const SESSION_KEY = 'session';
+    const form = document.getElementById('loginForm');
+    const result = document.getElementById('loginResult');
+    const submitBtn = document.getElementById('submitBtn');
+
+    async function fetchCurrentTerm() {
+      try {
+        const res = await fetch('/api/config/term');
+        const data = await res.json().catch(() => ({}));
+        return data.term || null;
+      } catch {
+        return null;
+      }
+    }
+
+    function getRedirectPath(role) {
+      if (role === 'ADMIN') return '/admin.html';
+      if (role === 'TEACHER') return '/teacher.html';
+      return '/student.html';
+    }
+
+    function loadSession() {
+      try {
+        const raw = sessionStorage.getItem(SESSION_KEY);
+        return raw ? JSON.parse(raw) : null;
+      } catch {
+        return null;
+      }
+    }
+
+    function saveSession(payload) {
+      sessionStorage.setItem(SESSION_KEY, JSON.stringify(payload));
+    }
+
+    function showMessage(text, ok = true) {
+      result.textContent = text;
+      result.style.display = 'block';
+      result.className = ok ? 'alert' : 'alert error';
+    }
+
+    async function apiLogin(username, password) {
+      const res = await fetch('/api/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data.error || '登录失败');
+      }
+      return data;
+    }
+
+    async function redirectIfLoggedIn() {
+      const current = loadSession();
+      if (current?.role) {
+        if (!current.term) {
+          const term = await fetchCurrentTerm();
+          if (term) {
+            saveSession({ ...current, term });
+          }
+        }
+        window.location.href = getRedirectPath(current.role);
+      }
+    }
+
+    redirectIfLoggedIn();
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const username = form.username.value.trim();
+      const password = form.password.value;
+      if (!username || !password) return;
+      submitBtn.disabled = true;
+      submitBtn.textContent = '正在登录...';
+      try {
+        const data = await apiLogin(username, password);
+        let term = data.term;
+        if (!term) {
+          term = await fetchCurrentTerm();
+        }
+        const session = { ...data, username, term: term || null };
+        saveSession(session);
+        showMessage(`登录成功，角色=${data.role}，即将跳转`, true);
+        window.location.href = getRedirectPath(data.role);
+      } catch (err) {
+        showMessage(err.message || '登录失败', false);
+      } finally {
+        submitBtn.disabled = false;
+        submitBtn.textContent = '登录并跳转';
+      }
+    });
+  </script>
+</body>
+</html>

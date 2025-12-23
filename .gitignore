@@ -1,0 +1,27 @@
+# Database runtime and binary archives
+pgdata/
+pglogs/
+pgsql/
+postgresql-16.4-1-windows-x64-binaries.zip
+
+# Temporary test clusters/logs
+tmp_pgdata/
+tmp_pglog
+tmp_pglog/
+
+# Ignore large disk images that don't belong in the repo
+*.iso
+
+# Node dependencies (keep installs local)
+node_modules/
+
+# Ignore generated server logs
+server/node.err.log
+server/node.out.log
+
+# Environment secrets (commit example only)
+.env
+*/.env
+
+# Local temp credentials
+tmp_pg_pwd.txt

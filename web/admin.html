@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>管理员视图 · 同济选课管理平台</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #f4f3ef;
+      --panel: #ffffff;
+      --border: #e5e5e5;
+      --accent: #d97757;
+      --accent-2: #c06040;
+      --text: #1a1a1a;
+      --muted: #6b7280;
+      --danger: #d14343;
+      --success: #22a06b;
+      --shadow: 0 18px 40px rgba(0,0,0,0.08);
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: 'Manrope', 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+    }
+    header {
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 24px 20px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .logo { font-weight: 700; font-size: 18px; letter-spacing: 0.6px; }
+    .pill {
+      padding: 6px 12px;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      background: var(--panel);
+      color: var(--muted);
+      font-size: 12px;
+      letter-spacing: 0.6px;
+    }
+    main {
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 0 20px 48px;
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 16px;
+    }
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 18px;
+      box-shadow: var(--shadow);
+    }
+    h1 {
+      margin: 0 0 8px;
+      font-size: clamp(24px, 4vw, 32px);
+      line-height: 1.2;
+    }
+    p.lead { margin: 0; color: var(--muted); }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 12px;
+      font-size: 13px;
+    }
+    th, td {
+      text-align: left;
+      padding: 8px 10px;
+      border-bottom: 1px solid var(--border);
+      color: var(--text);
+    }
+    th { color: var(--muted); font-weight: 600; }
+    button {
+      padding: 9px 12px;
+      border-radius: 10px;
+      border: none;
+      background: linear-gradient(135deg, var(--accent), var(--accent-2));
+      color: #fff;
+      font-weight: 700;
+      letter-spacing: 0.2px;
+      cursor: pointer;
+      transition: transform 0.1s ease, box-shadow 0.2s ease, opacity 0.2s ease;
+    }
+    button.small { padding: 8px 10px; font-size: 12px; }
+    button[disabled] { opacity: 0.65; cursor: not-allowed; }
+    button:hover:not([disabled]) { transform: translateY(-1px); box-shadow: 0 10px 24px rgba(0,0,0,0.12); }
+    .hint { color: var(--muted); font-size: 13px; margin-top: 6px; }
+    .alert {
+      border-radius: 12px;
+      padding: 12px 14px;
+      border: 1px solid rgba(34,160,107,0.25);
+      background: rgba(34,160,107,0.08);
+      color: var(--success);
+      font-size: 13px;
+      margin-top: 12px;
+    }
+    .error {
+      border: 1px solid rgba(209,67,67,0.35);
+      background: rgba(209,67,67,0.08);
+      color: var(--danger);
+    }
+    .grid {
+      display: grid;
+      gap: 16px;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      align-items: stretch;
+    }
+    .card {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      padding: 14px 16px;
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      background: linear-gradient(180deg, #fdfcf9 0%, #f7f5f1 100%);
+      color: var(--text);
+      font-size: 13px;
+      box-shadow: 0 10px 24px rgba(0,0,0,0.04);
+    }
+    .card-label {
+      font-size: 12px;
+      letter-spacing: 0.8px;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+    .card-value {
+      font-size: 18px;
+      font-weight: 700;
+      color: var(--text);
+      line-height: 1.3;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    .pill-value {
+      display: inline-flex;
+      align-items: center;
+      padding: 8px 12px;
+      border-radius: 12px;
+      background: #fff7f3;
+      color: var(--accent-2);
+      border: 1px solid rgba(192,96,64,0.35);
+      font-weight: 700;
+      font-size: 16px;
+      letter-spacing: 0.3px;
+      box-shadow: 0 6px 16px rgba(0,0,0,0.05);
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="logo">管理员视图</div>
+    <div class="pill" id="userInfo"></div>
+  </header>
+
+  <main>
+    <section class="panel">
+      <div style="display:flex; justify-content: space-between; align-items:center; gap: 12px; flex-wrap: wrap;">
+        <div>
+          <h1 style="margin-bottom:4px;">全局看板</h1>
+        </div>
+        <button id="logoutBtn" class="small">退出登录</button>
+      </div>
+      <div class="grid" style="margin-top:12px;">
+        <div class="card">
+          <div class="card-label">学期</div>
+          <div class="card-value"><span class="pill-value" id="termLabel">-</span></div>
+        </div>
+        <div class="card">
+          <div class="card-label">账号</div>
+          <div class="card-value"><span class="pill-value" id="accountLabel">-</span></div>
+        </div>
+        <div class="card">
+          <div class="card-label">账号清单</div>
+          <div class="card-value"><span class="pill-value">login-accounts.md</span></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h2 style="margin:0 0 6px;">课程选课统计</h2>
+      <div id="statContainer" class="hint" style="margin-top:10px;">加载中...</div>
+      <div id="message" class="alert" style="display:none;"></div>
+    </section>
+  </main>
+
+  <script>
+    const SESSION_KEY = 'session';
+    const userInfo = document.getElementById('userInfo');
+    const termLabel = document.getElementById('termLabel');
+    const accountLabel = document.getElementById('accountLabel');
+    const statContainer = document.getElementById('statContainer');
+    const message = document.getElementById('message');
+    const logoutBtn = document.getElementById('logoutBtn');
+    let session = null;
+
+    function saveSession(payload) {
+      sessionStorage.setItem(SESSION_KEY, JSON.stringify(payload));
+    }
+
+    function loadSession() {
+      try {
+        const raw = sessionStorage.getItem(SESSION_KEY);
+        return raw ? JSON.parse(raw) : null;
+      } catch {
+        return null;
+      }
+    }
+
+    function requireSession(expectedRole = 'ADMIN') {
+      const current = loadSession();
+      if (!current || !current.token || (expectedRole && current.role !== expectedRole)) {
+        window.location.href = '/index.html';
+        return null;
+      }
+      return current;
+    }
+
+    async function fetchCurrentTerm() {
+      try {
+        const res = await fetch('/api/config/term');
+        const data = await res.json().catch(() => ({}));
+        return data.term || null;
+      } catch {
+        return null;
+      }
+    }
+
+    async function ensureTerm() {
+      if (session?.term) return session.term;
+      const term = await fetchCurrentTerm();
+      if (term) {
+        session = { ...session, term };
+        saveSession(session);
+        termLabel.textContent = term;
+      }
+      return session?.term || null;
+    }
+
+    function showMessage(text, ok = true) {
+      message.textContent = text;
+      message.style.display = 'block';
+      message.className = ok ? 'alert' : 'alert error';
+    }
+
+    async function api(url) {
+      const headers = session?.token ? { Authorization: `Bearer ${session.token}` } : {};
+      const res = await fetch(url, { headers });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data.error || data.message || '请求失败');
+      }
+      return data;
+    }
+
+    function renderStats(rows) {
+      if (!rows || !rows.length) return '<div class="hint">暂无数据</div>';
+      return `<table><thead><tr><th>课程号</th><th>课程名</th><th>教师</th><th>容量</th><th>已选</th><th>余量</th></tr></thead><tbody>
+        ${rows.map(r => `<tr>
+          <td>${r.course_no ?? r.COURSE_NO ?? '-'}</td>
+          <td>${r.course_name ?? r.COURSE_NAME ?? '-'}</td>
+          <td>${r.teacher_name ?? r.TEACHER_NAME ?? '-'}</td>
+          <td>${r.capacity ?? r.CAPACITY ?? '-'}</td>
+          <td>${r.selected_num ?? r.SELECTED_NUM ?? '-'}</td>
+          <td>${r.remaining ?? r.REMAINING ?? '-'}</td>
+        </tr>`).join('')}
+      </tbody></table>`;
+    }
+
+    async function loadStats() {
+      try {
+        const term = await ensureTerm();
+        const url = term ? `/api/stat?term=${encodeURIComponent(term)}` : '/api/stat';
+        const rows = await api(url);
+        statContainer.innerHTML = renderStats(rows);
+      } catch (err) {
+        statContainer.innerHTML = '<div class="hint">加载失败</div>';
+        showMessage(err.message, false);
+      }
+    }
+
+    logoutBtn.addEventListener('click', () => {
+      sessionStorage.removeItem(SESSION_KEY);
+      window.location.href = '/index.html';
+    });
+
+    (async function init() {
+      session = requireSession('ADMIN');
+      if (!session) return;
+      userInfo.textContent = `管理员 / 用户ID: ${session.user_id}`;
+      accountLabel.textContent = session.username || '-';
+      if (session.term) {
+        termLabel.textContent = session.term;
+      }
+      await ensureTerm();
+      termLabel.textContent = session.term || '-';
+      await loadStats();
+    })();
+  </script>
+</body>
+</html>

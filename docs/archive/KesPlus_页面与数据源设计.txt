@@ -1,0 +1,101 @@
+﻿KesPlus 页面与数据源设计说明
+============================
+
+1. 总体说明
+- 系统角色：管理员、教师、学生。登录后根据 ROLE 加载对应菜单。
+- 数据源统一指向 Kingbase 数据库，建议使用命名规范：DS_<模块>_<用途>。
+- 存储过程调用：选课/退课/统计分别调用 PROC_SELECT_COURSE、PROC_DROP_COURSE、PROC_STAT_COURSE_SELECT。
+- 事务建议：单次按钮操作（选课、退课、保存）各使用独立事务；查询类操作可用自动提交。
+
+2. 登录与主界面
+- 页面：登录 LOGIN_FORM（所有角色）
+  · 数据源：DS_LOGIN（调用 FN_LOGIN(:username, :password)，返回 user_id/role/status/stu_id/tea_id，服务端完成密码哈希校验）
+  · 主要元素：用户名、密码输入框；登录按钮、重置按钮；提示区域。
+  · 事件：登录按钮依赖 FN_LOGIN 校验且 status='1'，根据 role 跳转主界面；如需改密，调用 PROC_SET_PASSWORD。
+
+- 页面：主界面 MAIN_FRAME（所有角色）
+  · 用途：展示菜单与页面入口，根据角色过滤模块。
+  · 菜单示例：管理员（学生管理、教师管理、课程管理、选课管理、统计查询、系统管理）；教师（课程列表、选课情况）；学生（可选课程、我的选课）。
+
+3. 学生管理（管理员）
+- 页面：学生列表 STUDENT_LIST
+  · 数据源：DS_STUDENT_LIST（SQL：按学号/姓名/学院/专业/年级模糊查询 tb_student，JOIN tb_department/tb_major；支持分页）。
+  · 元素：查询条件区（学号、姓名、学院、专业、年级下拉）；数据表格显示学号、姓名、学院、专业、年级、状态；按钮：新增、编辑、删除。
+  · 事件：
+    - 查询按钮：刷新 DS_STUDENT_LIST。
+    - 新增/编辑：打开 STUDENT_EDIT。
+    - 删除：执行 DELETE 或逻辑删除 UPDATE status='0'。
+
+- 页面：学生编辑 STUDENT_EDIT
+  · 数据源：DS_STUDENT_FORM（单条记录，基于主键 STU_ID）；学院、专业下拉使用 DS_DEPT_OPTIONS、DS_MAJOR_OPTIONS。
+  · 元素：表单录入学号、姓名、性别、学院、专业、年级、联系方式、关联账号。
+  · 事件：保存按钮执行 INSERT/UPDATE tb_student；保存成功后关闭并刷新 STUDENT_LIST。
+
+4. 教师管理（管理员）
+- 页面：教师列表 TEACHER_LIST
+  · 数据源：DS_TEACHER_LIST（SQL：按工号/姓名/学院查询 tb_teacher JOIN tb_department）。
+  · 元素：查询条件区；表格显示工号、姓名、学院、职称、状态；按钮：新增、编辑、删除。
+  · 事件：同学生列表。
+
+- 页面：教师编辑 TEACHER_EDIT
+  · 数据源：DS_TEACHER_FORM；下拉：DS_DEPT_OPTIONS。
+  · 事件：保存按钮 INSERT/UPDATE tb_teacher。
+
+5. 课程管理（管理员主、教师辅）
+- 页面：课程列表 COURSE_LIST
+  · 数据源：DS_COURSE_LIST（SQL：按课程号/名称/教师/学院/学期查询 tb_course JOIN tb_teacher JOIN tb_department）。
+  · 元素：查询条件区（课程号、课程名、教师、学期、学院）；表格显示课程号、名称、教师、学分、容量、已选人数、状态；按钮：新增、编辑、删除/停开。
+  · 事件：
+    - 查询：刷新列表。
+    - 停开：更新 tb_course.status='0'。
+
+- 页面：课程编辑 COURSE_EDIT
+  · 数据源：DS_COURSE_FORM；下拉：教师列表 DS_TEACHER_OPTIONS、学院 DS_DEPT_OPTIONS。
+  · 事件：保存按钮 INSERT/UPDATE tb_course，初始化 selected_num=0；删除按钮物理/逻辑删除。
+
+6. 选课管理（学生端核心，管理员可代操作）
+- 页面：可选课程列表 SELECTABLE
+  · 角色：学生
+  · 数据源：DS_SELECTABLE（SQL：查询当前学期可选课程，条件课程号/名称/教师/学院，过滤 status='1'，selected_num<capacity）。
+  · 元素：查询条件区；表格显示课程号、名称、教师、容量、已选人数、剩余名额、学分；行操作按钮“选课”。
+  · 事件：
+    - 选课按钮：CALL PROC_SELECT_COURSE(:stu_id, :course_id, :term, out_success, out_msg)；根据 out_success 提示并刷新。
+
+- 页面：我的选课 MY_COURSE
+  · 角色：学生
+  · 数据源：DS_MYCOURSE（SQL：按学生 ID、学期查询 tb_student_course JOIN tb_course，显示状态）。
+  · 元素：表格显示课程号、名称、教师、学分、状态、选课时间；行操作“退课”。
+  · 事件：退课按钮 CALL PROC_DROP_COURSE(:stu_id, :course_id, :term, out_success, out_msg)；成功后刷新。
+
+- 页面：代选/代退 ADMIN_SELECT_DROP
+  · 角色：管理员
+  · 数据源：DS_SC_ADMIN（SQL：可按学号、课程号、学期查询 tb_student_course）；按钮：代选（调用 PROC_SELECT_COURSE）、代退（调用 PROC_DROP_COURSE）、删除异常记录（DELETE）。
+
+7. 查询与统计
+- 页面：教师端选课情况 TEACHER_COURSE_STAT
+  · 角色：教师
+  · 数据源：DS_TEACHER_COURSE_STAT（SQL：按教师 ID 查询其课程的选课人数与学生列表，JOIN tb_student_course/tb_student）。
+  · 元素：查询条件（课程、学期）；表格显示课程与人数，可展开学生清单。
+
+- 页面：管理员选课统计 ADMIN_COURSE_STAT
+  · 角色：管理员
+  · 数据源：PROC_STAT_COURSE_SELECT 作为数据源，参数 p_term 来自查询条件。
+  · 元素：查询条件（学期、课程号/名可在前端过滤）；表格显示课程号、课程名、教师、容量、已选、剩余；可添加导出按钮。
+
+8. 系统管理与基础数据
+- 页面：学院管理 DEPT_MGR
+  · 数据源：DS_DEPT_LIST（tb_department）；表格+表单，支持新增/编辑/停用。
+
+- 页面：专业管理 MAJOR_MGR
+  · 数据源：DS_MAJOR_LIST（tb_major JOIN tb_department）；表单含学院下拉。
+
+- 页面：系统参数 PARAM_MGR
+  · 数据源：DS_PARAM（tb_sys_param）；关键参数：SELECT_START_TIME、SELECT_END_TIME、DROP_END_TIME、CURRENT_TERM。
+  · 元素：参数键不可编辑，值与备注可编辑；保存按钮执行 UPDATE。
+  · 注意：修改时间后提示重新测试选课/退课流程。
+
+9. 其他设计要点
+- 数据源参数绑定：查询区控件需绑定到对应 SQL/存储过程参数；学期默认取 TB_SYS_PARAM.CURRENT_TERM。
+- 权限控制：菜单与按钮按 ROLE 过滤；学生/教师数据源应自动带入当前用户关联的 STU_ID/TEA_ID。
+- 异常提示：存储过程返回消息通过提示框显示；失败不刷新列表，成功后刷新。
+- 分页与排序：列表类数据源开启分页，常用排序字段如课程号、学号。

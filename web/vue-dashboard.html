@@ -1,0 +1,402 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>统计大屏 · 同济选课管理平台</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #0f1115;
+      --panel: #131722;
+      --border: #1f2433;
+      --accent: #f08b5a;
+      --accent-2: #f7c266;
+      --text: #f7f9fb;
+      --muted: #9aa4b5;
+      --grid: #1a1f2d;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: 'Manrope', 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
+      background: radial-gradient(circle at 20% 20%, rgba(240,139,90,0.08), transparent 35%),
+                  radial-gradient(circle at 80% 0%, rgba(247,194,102,0.08), transparent 32%),
+                  radial-gradient(circle at 80% 60%, rgba(99,102,241,0.05), transparent 28%),
+                  var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+    }
+    header {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 24px 20px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+    .logo {
+      font-weight: 700;
+      letter-spacing: 0.8px;
+      font-size: 18px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .pill {
+      padding: 8px 12px;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      background: var(--panel);
+      color: var(--muted);
+      font-size: 12px;
+      letter-spacing: 0.6px;
+    }
+    main {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 0 20px 36px;
+      display: grid;
+      gap: 16px;
+    }
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 16px;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.25);
+    }
+    .grid {
+      display: grid;
+      gap: 14px;
+    }
+    .grid.cols-3 { grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
+    .card {
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 14px;
+      background: linear-gradient(180deg, rgba(240,139,90,0.06) 0%, rgba(19,23,34,0.8) 100%);
+    }
+    .card-label { color: var(--muted); font-size: 12px; letter-spacing: 0.6px; text-transform: uppercase; }
+    .card-value { font-size: 18px; font-weight: 700; margin-top: 6px; }
+    button {
+      padding: 10px 14px;
+      border-radius: 10px;
+      border: none;
+      background: linear-gradient(135deg, var(--accent), var(--accent-2));
+      color: #0b0c11;
+      font-weight: 800;
+      letter-spacing: 0.4px;
+      cursor: pointer;
+      transition: transform 0.1s ease, box-shadow 0.2s ease, opacity 0.2s ease;
+    }
+    button.small { padding: 8px 12px; font-size: 12px; }
+    button:hover { transform: translateY(-1px); box-shadow: 0 12px 26px rgba(0,0,0,0.2); }
+    button[disabled] { opacity: 0.65; cursor: not-allowed; }
+    .chart {
+      width: 100%;
+      height: 360px;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      background: radial-gradient(circle at 50% 20%, rgba(240,139,90,0.06), transparent 40%), var(--grid);
+    }
+    .row {
+      display: grid;
+      gap: 16px;
+      grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+    }
+    .alert {
+      border-radius: 12px;
+      padding: 12px 14px;
+      border: 1px solid rgba(240,139,90,0.35);
+      background: rgba(240,139,90,0.08);
+      color: var(--text);
+      font-size: 13px;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="logo">统计大屏 · 同济选课管理平台</div>
+    <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+      <span class="pill" id="userInfo">-</span>
+      <button id="logoutBtn" class="small">退出登录</button>
+    </div>
+  </header>
+
+  <main>
+    <div class="panel">
+      <div class="grid cols-3">
+        <div class="card">
+          <div class="card-label">学期</div>
+          <div class="card-value" id="termLabel">-</div>
+        </div>
+        <div class="card">
+          <div class="card-label">角色</div>
+          <div class="card-value" id="roleLabel">-</div>
+        </div>
+        <div class="card">
+          <div class="card-label">筛选粒度</div>
+          <div class="card-value">
+            <select id="bucketSelect" style="background:#0d1018;color:var(--text);border:1px solid var(--border);padding:8px 10px;border-radius:8px;">
+              <option value="day">按日</option>
+              <option value="hour">按小时</option>
+            </select>
+            <button id="refreshBtn" class="small" style="margin-left:8px;">刷新</button>
+            <button id="exportBtn" class="small" style="margin-left:8px;">导出 CSV</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="row">
+      <div class="panel">
+        <h3 style="margin:0 0 8px;">热门课程 Top</h3>
+        <div id="topChart" class="chart"></div>
+      </div>
+      <div class="panel">
+        <h3 style="margin:0 0 8px;">学院容量/已选分布</h3>
+        <div id="deptChart" class="chart"></div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h3 style="margin:0 0 8px;">选课趋势</h3>
+      <div id="trendChart" class="chart" style="height:340px;"></div>
+    </div>
+
+    <div id="message" class="alert" style="display:none;"></div>
+  </main>
+
+  <script src="https://cdn.jsdelivr.net/npm/vue@3.4.38/dist/vue.global.prod.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.1/dist/echarts.min.js"></script>
+  <script>
+    const SESSION_KEY = 'session';
+
+    function loadSession() {
+      try {
+        const raw = sessionStorage.getItem(SESSION_KEY);
+        return raw ? JSON.parse(raw) : null;
+      } catch {
+        return null;
+      }
+    }
+
+    function saveSession(payload) {
+      sessionStorage.setItem(SESSION_KEY, JSON.stringify(payload));
+    }
+
+    function requireSession() {
+      const current = loadSession();
+      if (!current || !current.token) {
+        window.location.href = '/index.html';
+        return null;
+      }
+      if (!['ADMIN', 'TEACHER'].includes(current.role)) {
+        alert('仅管理员/教师可查看统计大屏');
+        window.location.href = '/index.html';
+        return null;
+      }
+      return current;
+    }
+
+    async function fetchCurrentTerm() {
+      try {
+        const res = await fetch('/api/config/term');
+        const data = await res.json().catch(() => ({}));
+        return data.term || null;
+      } catch {
+        return null;
+      }
+    }
+
+    function showMessage(text, ok = true) {
+      const box = document.getElementById('message');
+      box.textContent = text;
+      box.style.display = 'block';
+      box.style.borderColor = ok ? 'rgba(240,139,90,0.35)' : 'rgba(255,99,99,0.35)';
+      box.style.background = ok ? 'rgba(240,139,90,0.08)' : 'rgba(255,99,99,0.08)';
+    }
+
+    const app = Vue.createApp({
+      data() {
+        return {
+          session: null,
+          term: null,
+          topChart: null,
+          deptChart: null,
+          trendChart: null,
+        };
+      },
+      methods: {
+        async api(path) {
+          const headers = { Authorization: `Bearer ${this.session.token}` };
+          const res = await fetch(path, { headers });
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok) {
+            throw new Error(data.error || '请求失败');
+          }
+          return data;
+        },
+        async ensureTerm() {
+          if (this.session.term) {
+            this.term = this.session.term;
+            return this.term;
+          }
+          const term = await fetchCurrentTerm();
+          if (term) {
+            this.term = term;
+            this.session = { ...this.session, term };
+            saveSession(this.session);
+          }
+          return this.term;
+        },
+        initCharts() {
+          this.topChart = echarts.init(document.getElementById('topChart'));
+          this.deptChart = echarts.init(document.getElementById('deptChart'));
+          this.trendChart = echarts.init(document.getElementById('trendChart'));
+          window.addEventListener('resize', () => {
+            this.topChart.resize();
+            this.deptChart.resize();
+            this.trendChart.resize();
+          });
+        },
+        async loadTop() {
+          const url = new URL('/api/stat/top', window.location.origin);
+          if (this.term) url.searchParams.set('term', this.term);
+          const rows = await this.api(url.toString());
+          const names = rows.map(r => r.course_name || r.COURSE_NAME || '-');
+          const values = rows.map(r => r.selected_num ?? r.SELECTED_NUM ?? 0);
+          this.topChart.setOption({
+            backgroundColor: 'transparent',
+            tooltip: { trigger: 'axis' },
+            xAxis: { type: 'category', data: names, axisLabel: { color: '#d8dde6' } },
+            yAxis: { type: 'value', axisLabel: { color: '#d8dde6' } },
+            grid: { left: 60, right: 20, bottom: 70, top: 30 },
+            series: [{
+              name: '已选人数',
+              type: 'bar',
+              data: values,
+              itemStyle: {
+                color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+                  { offset: 0, color: '#f08b5a' },
+                  { offset: 1, color: '#f7c266' },
+                ]),
+                borderRadius: [6, 6, 0, 0],
+              },
+            }],
+          });
+        },
+        async loadDept() {
+          const url = new URL('/api/stat/dept', window.location.origin);
+          if (this.term) url.searchParams.set('term', this.term);
+          const rows = await this.api(url.toString());
+          const data = rows.map(r => ({
+            name: r.dept_name || r.DEPT_NAME || '-',
+            value: r.selected_total ?? r.SELECTED_TOTAL ?? 0,
+          }));
+          this.deptChart.setOption({
+            backgroundColor: 'transparent',
+            tooltip: { trigger: 'item' },
+            legend: { top: 10, textStyle: { color: '#d8dde6' } },
+            series: [{
+              name: '已选人数',
+              type: 'pie',
+              radius: ['35%', '65%'],
+              center: ['50%', '55%'],
+              itemStyle: {
+                borderColor: '#0f1115',
+                borderWidth: 2,
+              },
+              label: { color: '#d8dde6' },
+              data,
+            }],
+          });
+        },
+        async loadTrend() {
+          const bucket = document.getElementById('bucketSelect').value;
+          const url = new URL('/api/stat/trend', window.location.origin);
+          if (this.term) url.searchParams.set('term', this.term);
+          url.searchParams.set('bucket', bucket);
+          const rows = await this.api(url.toString());
+          const labels = rows.map(r => r.bucket_label || r.BUCKET_LABEL || '-');
+          const values = rows.map(r => r.total ?? r.TOTAL ?? 0);
+          this.trendChart.setOption({
+            backgroundColor: 'transparent',
+            tooltip: { trigger: 'axis' },
+            xAxis: { type: 'category', data: labels, axisLabel: { color: '#d8dde6' } },
+            yAxis: { type: 'value', axisLabel: { color: '#d8dde6' } },
+            grid: { left: 60, right: 20, bottom: 50, top: 30 },
+            series: [{
+              name: '选课次数',
+              type: 'line',
+              smooth: true,
+              data: values,
+              lineStyle: { color: '#f08b5a', width: 3 },
+              areaStyle: { color: 'rgba(240,139,90,0.15)' },
+            }],
+          });
+        },
+        async loadAll() {
+          try {
+            await this.ensureTerm();
+            await Promise.all([this.loadTop(), this.loadDept(), this.loadTrend()]);
+            showMessage('数据加载完成', true);
+          } catch (err) {
+            console.error(err);
+            showMessage(err.message || '加载失败', false);
+          }
+        },
+      },
+      async mounted() {
+        this.session = requireSession();
+        if (!this.session) return;
+        document.getElementById('userInfo').textContent = `${this.session.role} / 用户ID: ${this.session.user_id}`;
+        document.getElementById('roleLabel').textContent = this.session.role || '-';
+        await this.ensureTerm();
+        document.getElementById('termLabel').textContent = this.term || '-';
+        this.initCharts();
+        await this.loadAll();
+      },
+    });
+
+    app.mount('body');
+
+    document.getElementById('logoutBtn').addEventListener('click', () => {
+      sessionStorage.removeItem(SESSION_KEY);
+      window.location.href = '/index.html';
+    });
+    document.getElementById('refreshBtn').addEventListener('click', () => {
+      const vm = app._instance?.proxy;
+      vm && vm.loadAll();
+    });
+    document.getElementById('exportBtn').addEventListener('click', async () => {
+      const vm = app._instance?.proxy;
+      const term = vm?.term;
+      const url = new URL('/api/export/stat', window.location.origin);
+      if (term) url.searchParams.set('term', term);
+      try {
+        const session = loadSession();
+        const res = await fetch(url.toString(), {
+          headers: session?.token ? { Authorization: `Bearer ${session.token}` } : {},
+        });
+        if (!res.ok) throw new Error('导出失败');
+        const blob = await res.blob();
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(blob);
+        link.download = `stat_${term || 'current'}.csv`;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        showMessage('已导出 CSV', true);
+      } catch (err) {
+        showMessage(err.message || '导出失败', false);
+      }
+    });
+  </script>
+</body>
+</html>
