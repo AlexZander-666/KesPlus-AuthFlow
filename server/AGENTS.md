@@ -2,7 +2,7 @@
 
 ## Project Structure & Module Organization
 - `index.js`: Express API server with CORS, JSON parsing, morgan logging, and static assets served from `../web`. Exposes health check (`/health`), authentication (`/api/login`), course selection (`/api/select`, `/api/drop`), course queries (`/api/courses/*`), and stats (`/api/stat`).
-- `db.js`: PostgreSQL pool setup plus `testConnection()`. Reads `DB_*` vars; warns if missing.
+- `db.js`: PostgreSQL pool setup plus `testConnection()`. Reads `DB_*` vars and fails fast if missing/invalid.
 - `.env`: Local development defaults for database and `PORT`. Keep credentials local and rotate when shared.
 - `package.json`: Script entrypoints (`start`, `dev`, `test`) and dependency manifest. `node_modules/` is generated.
 
@@ -32,4 +32,5 @@
 
 ## Configuration & Security Tips
 - Required env vars: `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_NAME`, `PORT`. Confirm connectivity with `npm start` then watch for `[db] connected` log.
+- `AUTH_SECRET` is required for token signing; set a strong random value in local `.env` (see `.env.example`).
 - Stored procedures/functions (`FN_LOGIN`, `FN_SELECT_COURSE`, `FN_DROP_COURSE`, `PROC_STAT_COURSE_SELECT`) live in the database; align API behavior with their contracts and avoid logging returned secrets.

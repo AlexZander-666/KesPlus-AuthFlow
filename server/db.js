@@ -3,18 +3,22 @@ import pkg from 'pg';
 const { Pool } = pkg;
 
 const requiredEnv = ['DB_HOST', 'DB_PORT', 'DB_USER', 'DB_PASSWORD', 'DB_NAME'];
-requiredEnv.forEach((key) => {
-  if (!process.env[key]) {
-    console.warn(`[config] missing env ${key}, check .env`);
-  }
-});
+const missingEnv = requiredEnv.filter((key) => !process.env[key] || !process.env[key].toString().trim());
+if (missingEnv.length) {
+  throw new Error(`[config] missing env: ${missingEnv.join(', ')} (copy server/.env.example to server/.env and fill in values)`);
+}
+
+const port = Number(process.env.DB_PORT);
+if (!Number.isFinite(port) || port <= 0) {
+  throw new Error('[config] DB_PORT must be a positive number');
+}
 
 export const pool = new Pool({
-  host: process.env.DB_HOST || 'localhost',
-  port: Number(process.env.DB_PORT || 54321),
-  user: process.env.DB_USER || 'system',
-  password: process.env.DB_PASSWORD || '123456',
-  database: process.env.DB_NAME || 'course_selection_db',
+  host: process.env.DB_HOST,
+  port,
+  user: process.env.DB_USER,
+  password: process.env.DB_PASSWORD,
+  database: process.env.DB_NAME,
 });
 
 export async function testConnection() {

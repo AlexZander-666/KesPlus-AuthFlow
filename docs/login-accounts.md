@@ -2,7 +2,7 @@
 
 ## 来源
 - 数据脚本：`db/04_seed_data_course_selection.sql`（运行后重置用户、教师、学生及课程数据）。
-- 默认数据库连接：`localhost:54321` / `course_selection_db`，用户 `system`（见 `.env`）。
+- 数据库连接参数：本地运行时从环境变量/`server/.env` 读取，参考 `server/.env.example`（请勿在仓库文档里写真实密码）。
 
 ## 预置账号
 所有教师共用密码 `teacher123`，所有学生共用密码 `student123`（上线前请修改）。账号按专业/学院分层，方便分流测试。

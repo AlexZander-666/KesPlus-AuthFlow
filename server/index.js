@@ -10,7 +10,10 @@ import { pool, testConnection } from './db.js';
 const app = express();
 const PORT = process.env.PORT || 3000;
 const DEFAULT_TERM = (process.env.DEFAULT_TERM || '').trim() || null;
-const AUTH_SECRET = (process.env.AUTH_SECRET || 'dev-secret-change-me').trim();
+const AUTH_SECRET = (process.env.AUTH_SECRET || '').trim();
+if (!AUTH_SECRET) {
+  throw new Error('[config] missing AUTH_SECRET (copy server/.env.example to server/.env and set a strong secret)');
+}
 const ALLOWED_PROCEDURES = new Set(['FN_SELECT_COURSE', 'FN_DROP_COURSE']);
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);

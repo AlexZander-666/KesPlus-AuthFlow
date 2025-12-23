@@ -2,10 +2,19 @@
 
 ## 数据库逻辑备份
 - 备份文件：`backups/course_selection_db.sql`（由 `sys_dump` 生成，包含最新表结构/触发器/过程/数据）。
-- 生成命令（需 `KBPASSWORD` 或连接串内含密码）：
+- 生成命令（建议用环境变量传密码，避免写入脚本/文档）：
 ```bash
+# bash
+KBPASSWORD=<你的数据库密码>
 sys_dump.exe -F p -f backups/course_selection_db.sql \
-  -d "dbname=course_selection_db host=localhost port=54322 user=system password=123456"
+  -d "dbname=course_selection_db host=<DB_HOST> port=<DB_PORT> user=<DB_USER>"
+```
+
+```powershell
+# PowerShell
+$env:KBPASSWORD="<你的数据库密码>"
+sys_dump.exe -F p -f backups/course_selection_db.sql `
+  -d "dbname=course_selection_db host=<DB_HOST> port=<DB_PORT> user=<DB_USER>"
 ```
 
 ## 环境变量
