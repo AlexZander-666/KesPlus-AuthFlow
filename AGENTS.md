@@ -29,6 +29,10 @@
 - Use `tests/db_trigger_procedure_tests.sql` after schema/procedure changes; add cases with clear step labels.
 - Manual checks: curl/Postman against `/api/login`, `/api/select`, `/api/drop`, `/api/courses/*`, `/api/stat` on a seeded DB.
 
+## Workflow & Execution
+- Self-verify after each task: complete implementation → run relevant tests → confirm success → proceed to next task.
+- Continue autonomously through all tasks until the full objective is achieved.
+
 ## Commit & Pull Request Guidelines
 - Commits: short imperative subjects (`Add selectable course endpoint`), bodies noting DB migrations, env changes, and manual test commands.
 - PRs: describe behavior changes, affected endpoints/SQL objects, verification steps, and UI impact (screenshots if `web/` changes). Link tasks/issues; never commit `.env`, dumps, or `node_modules/`.

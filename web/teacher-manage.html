@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>教师管理 · 同济选课管理平台</title>
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root { --bg: #f4f3ef; --panel: #ffffff; --border: #e5e5e5; --accent: #d97757; --text: #1a1a1a; --muted: #6b7280; --success: #22a06b; }
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: 'Manrope', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+    header { max-width: 1200px; margin: 0 auto; padding: 20px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; }
+    .logo { font-weight: 700; font-size: 18px; }
+    nav { display: flex; gap: 8px; }
+    nav a { padding: 8px 14px; border-radius: 8px; text-decoration: none; color: var(--text); background: var(--panel); border: 1px solid var(--border); font-size: 13px; }
+    nav a:hover, nav a.active { background: var(--accent); color: white; }
+    main { max-width: 1200px; margin: 0 auto; padding: 0 20px 40px; }
+    .panel { background: var(--panel); border: 1px solid var(--border); border-radius: 16px; padding: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.08); margin-bottom: 20px; }
+    h2 { margin: 0 0 12px; font-size: 20px; }
+    table { width: 100%; border-collapse: collapse; margin-top: 12px; font-size: 13px; }
+    th, td { text-align: left; padding: 10px; border-bottom: 1px solid var(--border); }
+    th { color: var(--muted); font-weight: 600; }
+    button { padding: 8px 12px; border-radius: 8px; border: none; background: var(--accent); color: white; font-weight: 700; cursor: pointer; font-size: 13px; }
+    button.small { padding: 6px 10px; font-size: 12px; }
+    button:hover { opacity: 0.9; }
+    .alert { padding: 12px; border-radius: 8px; margin-bottom: 12px; font-size: 13px; }
+    .alert.success { background: rgba(34,160,107,0.1); color: var(--success); }
+    .alert.error { background: rgba(209,67,67,0.1); color: #d14343; }
+    .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center; }
+    .modal.active { display: flex; }
+    .modal-content { background: var(--panel); border-radius: 16px; padding: 24px; max-width: 600px; width: 90%; max-height: 80vh; overflow-y: auto; }
+    .form-group { margin-bottom: 14px; }
+    .form-group label { display: block; margin-bottom: 6px; font-size: 13px; font-weight: 600; }
+    .form-group input { width: 100%; padding: 10px; border: 1px solid var(--border); border-radius: 8px; font-size: 14px; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 16px; }
+    .card { padding: 16px; border: 1px solid var(--border); border-radius: 12px; background: linear-gradient(180deg, #fdfcf9, #f7f5f1); }
+    .card-label { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; }
+    .card-value { font-size: 18px; font-weight: 700; margin-top: 6px; }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="logo">教师门户</div>
+    <nav>
+      <a href="/teacher.html">统计视图</a>
+      <a href="/teacher-manage.html" class="active">课程管理</a>
+      <a href="/vue-dashboard.html">数据大屏</a>
+    </nav>
+    <button id="logoutBtn" class="small">退出</button>
+  </header>
+  <main>
+    <div class="panel">
+      <div class="grid">
+        <div class="card"><div class="card-label">教师账号</div><div class="card-value" id="teacherAccount">-</div></div>
+        <div class="card"><div class="card-label">教师姓名</div><div class="card-value" id="teacherName">-</div></div>
+        <div class="card"><div class="card-label">当前学期</div><div class="card-value" id="termLabel">-</div></div>
+      </div>
+    </div>
+    <div class="panel">
+      <h2>我的授课课程</h2>
+      <div id="message" style="display:none;"></div>
+      <div id="coursesContainer">加载中...</div>
+    </div>
+  </main>
+  <div class="modal" id="studentsModal">
+    <div class="modal-content">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+        <h2 id="studentsModalTitle" style="margin:0;">选课学生名单</h2>
+        <button class="small" onclick="closeModal('studentsModal')">关闭</button>
+      </div>
+      <div id="studentsContainer">加载中...</div>
+    </div>
+  </div>
+  <script>
+    const SESSION_KEY='session';let session=null;
+    function loadSession(){try{const r=sessionStorage.getItem(SESSION_KEY);return r?JSON.parse(r):null}catch{return null}}
+    function requireSession(){const c=loadSession();if(!c||!c.token||c.role!=='TEACHER'){window.location.href='/index.html';return null}return c}
+    async function api(url,opt={}){const h={'Content-Type':'application/json',...(session?.token?{Authorization:`Bearer ${session.token}`}:{})};const res=await fetch(url,{headers:h,...opt});const data=await res.json().catch(()=>({}));if(!res.ok)throw new Error(data.error||'请求失败');return data}
+    function showMessage(t,ok=true){const m=document.getElementById('message');m.textContent=t;m.className=ok?'alert success':'alert error';m.style.display='block';setTimeout(()=>m.style.display='none',3000)}
+    function openModal(id){document.getElementById(id).classList.add('active')}
+    function closeModal(id){document.getElementById(id).classList.remove('active')}
+    async function loadTeacherInfo(){try{const teaId=parseInt(session.tea_id);if(!teaId||isNaN(teaId))return;const teacher=await api(`/api/teachers/${teaId}`);document.getElementById('teacherName').textContent=teacher.tea_name||'-';document.getElementById('teacherAccount').textContent=teacher.tea_no||session.username||'-'}catch(e){document.getElementById('teacherName').textContent=session.username||'-';document.getElementById('teacherAccount').textContent=session.tea_id||'-'}}
+    async function loadCourses(){try{const teaId=parseInt(session.tea_id);if(!teaId||isNaN(teaId)){document.getElementById('coursesContainer').innerHTML='<p style="color:var(--muted);">教师ID无效</p>';return}const term=session?.term||null;const url=term?`/api/teachers/${teaId}/courses?term=${term}`:`/api/teachers/${teaId}/courses`;const courses=await api(url);if(!courses.length){document.getElementById('coursesContainer').innerHTML='<p style="color:var(--muted);">暂无授课课程</p>';return}const html=`<table><thead><tr><th>课程号</th><th>课程名</th><th>类型</th><th>学分</th><th>容量</th><th>已选</th><th>学期</th><th>操作</th></tr></thead><tbody>${courses.map(c=>`<tr><td>${c.course_no}</td><td>${c.course_name}</td><td>${c.course_type||'-'}</td><td>${c.credit||'-'}</td><td>${c.capacity}</td><td>${c.selected_num}</td><td>${c.term}</td><td><button class="small" onclick="viewStudents(${c.course_id},'${c.course_name}')">查看学生</button></td></tr>`).join('')}</tbody></table>`;document.getElementById('coursesContainer').innerHTML=html}catch(e){showMessage(e.message,false)}}
+    async function viewStudents(courseId,courseName){try{const term=session?.term||null;const url=term?`/api/courses/${courseId}/students?term=${term}`:`/api/courses/${courseId}/students`;const students=await api(url);document.getElementById('studentsModalTitle').textContent=`${courseName} - 选课学生`;if(!students.length){document.getElementById('studentsContainer').innerHTML='<p style="color:var(--muted);">暂无学生选课</p>';openModal('studentsModal');return}const html=`<table><thead><tr><th>学号</th><th>姓名</th><th>性别</th><th>年级</th><th>学院</th><th>专业</th><th>成绩</th><th>操作</th></tr></thead><tbody>${students.map(s=>`<tr><td>${s.stu_no}</td><td>${s.stu_name}</td><td>${s.gender==='M'?'男':'女'}</td><td>${s.stu_grade||'-'}</td><td>${s.dept_name||'-'}</td><td>${s.major_name||'-'}</td><td><input type="number" id="grade_${s.sc_id}" value="${s.grade||''}" min="0" max="100" style="width:70px;padding:4px;border:1px solid var(--border);border-radius:4px;"></td><td><button class="small" onclick="updateGrade(${s.sc_id})">保存</button></td></tr>`).join('')}</tbody></table>`;document.getElementById('studentsContainer').innerHTML=html;openModal('studentsModal')}catch(e){showMessage(e.message,false)}}
+    async function updateGrade(scId){try{const gradeInput=document.getElementById(`grade_${scId}`);const grade=parseFloat(gradeInput.value);if(isNaN(grade)||grade<0||grade>100){alert('成绩必须在0-100之间');return}await api(`/api/grades/${scId}`,{method:'PUT',body:JSON.stringify({grade})});showMessage('成绩更新成功',true)}catch(e){showMessage(e.message,false)}}
+    document.getElementById('logoutBtn').addEventListener('click',()=>{sessionStorage.removeItem(SESSION_KEY);window.location.href='/index.html'});
+    (async function(){session=requireSession();if(!session)return;document.getElementById('termLabel').textContent=session.term||'-';await loadTeacherInfo();await loadCourses()})();
+  </script>
+</body>
+</html>

@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>管理员管理 · 同济选课管理平台</title>
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root { --bg: #f4f3ef; --panel: #ffffff; --border: #e5e5e5; --accent: #d97757; --text: #1a1a1a; --muted: #6b7280; --danger: #d14343; --success: #22a06b; }
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: 'Manrope', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+    header { max-width: 1200px; margin: 0 auto; padding: 20px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; }
+    .logo { font-weight: 700; font-size: 18px; }
+    nav { display: flex; gap: 8px; }
+    nav a { padding: 8px 14px; border-radius: 8px; text-decoration: none; color: var(--text); background: var(--panel); border: 1px solid var(--border); font-size: 13px; }
+    nav a:hover, nav a.active { background: var(--accent); color: white; }
+    main { max-width: 1200px; margin: 0 auto; padding: 0 20px 40px; }
+    .panel { background: var(--panel); border: 1px solid var(--border); border-radius: 16px; padding: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.08); }
+    .tabs { display: flex; gap: 8px; margin-bottom: 16px; border-bottom: 2px solid var(--border); padding-bottom: 8px; }
+    .tab { padding: 8px 16px; cursor: pointer; border-radius: 8px 8px 0 0; background: transparent; color: var(--muted); font-weight: 600; border: none; }
+    .tab.active { background: var(--accent); color: white; }
+    .tab-content { display: none; }
+    .tab-content.active { display: block; }
+    table { width: 100%; border-collapse: collapse; margin-top: 12px; font-size: 13px; }
+    th, td { text-align: left; padding: 10px; border-bottom: 1px solid var(--border); }
+    th { color: var(--muted); font-weight: 600; }
+    button { padding: 8px 12px; border-radius: 8px; border: none; background: var(--accent); color: white; font-weight: 700; cursor: pointer; font-size: 13px; }
+    button.small { padding: 6px 10px; font-size: 12px; }
+    button.secondary { background: var(--muted); }
+    button.danger { background: var(--danger); }
+    button:hover { opacity: 0.9; }
+    .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center; }
+    .modal.active { display: flex; }
+    .modal-content { background: var(--panel); border-radius: 16px; padding: 24px; max-width: 500px; width: 90%; max-height: 80vh; overflow-y: auto; }
+    .form-group { margin-bottom: 14px; }
+    .form-group label { display: block; margin-bottom: 6px; font-size: 13px; font-weight: 600; }
+    .form-group input, .form-group select, .form-group textarea { width: 100%; padding: 10px; border: 1px solid var(--border); border-radius: 8px; font-size: 14px; }
+    .alert { padding: 12px; border-radius: 8px; margin-bottom: 12px; font-size: 13px; }
+    .alert.success { background: rgba(34,160,107,0.1); color: var(--success); }
+    .alert.error { background: rgba(209,67,67,0.1); color: var(--danger); }
+    .badge { padding: 4px 8px; border-radius: 6px; font-size: 11px; font-weight: 700; }
+    .badge.active { background: rgba(34,160,107,0.2); color: var(--success); }
+    .badge.inactive { background: rgba(209,67,67,0.2); color: var(--danger); }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="logo">管理员控制台</div>
+    <nav>
+      <a href="/admin.html">统计看板</a>
+      <a href="/admin-manage.html" class="active">系统管理</a>
+      <a href="/vue-dashboard.html">数据大屏</a>
+    </nav>
+    <button id="logoutBtn" class="small">退出</button>
+  </header>
+  <main>
+    <div class="panel">
+      <div class="tabs">
+        <button class="tab active" data-tab="users">用户管理</button>
+        <button class="tab" data-tab="courses">课程管理</button>
+        <button class="tab" data-tab="config">系统参数</button>
+      </div>
+      <div id="message" style="display:none;"></div>
+      <div class="tab-content active" id="users-content">
+        <div style="display:flex;justify-content:space-between;margin-bottom:12px;">
+          <h2 style="margin:0;">用户列表</h2>
+          <button id="addUserBtn">新增用户</button>
+        </div>
+        <div id="usersContainer">加载中...</div>
+      </div>
+      <div class="tab-content" id="courses-content">
+        <div style="display:flex;justify-content:space-between;margin-bottom:12px;">
+          <h2 style="margin:0;">课程列表</h2>
+          <button id="addCourseBtn">新增课程</button>
+        </div>
+        <div id="coursesContainer">加载中...</div>
+      </div>
+      <div class="tab-content" id="config-content">
+        <h2 style="margin:0 0 12px;">系统参数</h2>
+        <div id="configContainer">加载中...</div>
+      </div>
+    </div>
+  </main>
+  <div class="modal" id="userModal">
+    <div class="modal-content">
+      <h2 id="userModalTitle">新增用户</h2>
+      <form id="userForm">
+        <input type="hidden" id="userId">
+        <div class="form-group"><label>用户名*</label><input type="text" id="username" required></div>
+        <div class="form-group" id="passwordGroup"><label>密码*</label><input type="password" id="password" required></div>
+        <div class="form-group"><label>姓名</label><input type="text" id="realName"></div>
+        <div class="form-group"><label>角色*</label><select id="role" required><option value="STUDENT">学生</option><option value="TEACHER">教师</option><option value="ADMIN">管理员</option></select></div>
+        <div class="form-group"><label>邮箱</label><input type="email" id="email"></div>
+        <div class="form-group"><label>手机</label><input type="tel" id="mobile"></div>
+        <div class="form-group"><label>状态</label><select id="status"><option value="1">启用</option><option value="0">禁用</option></select></div>
+        <div style="display:flex;gap:8px;justify-content:flex-end;">
+          <button type="button" class="secondary" onclick="closeModal('userModal')">取消</button>
+          <button type="submit">保存</button>
+        </div>
+      </form>
+    </div>
+  </div>
+  <div class="modal" id="courseModal">
+    <div class="modal-content">
+      <h2 id="courseModalTitle">新增课程</h2>
+      <form id="courseForm">
+        <input type="hidden" id="courseId">
+        <div class="form-group"><label>课程号*</label><input type="text" id="courseNo" required></div>
+        <div class="form-group"><label>课程名*</label><input type="text" id="courseName" required></div>
+        <div class="form-group"><label>类型</label><select id="courseType"><option value="Required">必修</option><option value="Elective">选修</option></select></div>
+        <div class="form-group"><label>学分</label><input type="number" step="0.5" id="credit"></div>
+        <div class="form-group"><label>学时</label><input type="number" id="period"></div>
+        <div class="form-group"><label>学院*</label><select id="deptId" required></select></div>
+        <div class="form-group"><label>教师*</label><select id="teaId" required></select></div>
+        <div class="form-group"><label>学期*</label><input type="text" id="term" required></div>
+        <div class="form-group"><label>容量*</label><input type="number" id="capacity" required min="1"></div>
+        <div class="form-group"><label>描述</label><textarea id="courseDesc" rows="2"></textarea></div>
+        <div class="form-group"><label>星期(1-7)</label><input type="number" id="dayOfWeek" min="1" max="7"></div>
+        <div class="form-group"><label>开始节次</label><input type="number" id="startSlot" min="1" max="14"></div>
+        <div class="form-group"><label>结束节次</label><input type="number" id="endSlot" min="1" max="14"></div>
+        <div class="form-group"><label>地点</label><input type="text" id="location"></div>
+        <div style="display:flex;gap:8px;justify-content:flex-end;">
+          <button type="button" class="secondary" onclick="closeModal('courseModal')">取消</button>
+          <button type="submit">保存</button>
+        </div>
+      </form>
+    </div>
+  </div>
+  <script>
+    const SESSION_KEY='session';let session=null;
+    function loadSession(){try{const r=sessionStorage.getItem(SESSION_KEY);return r?JSON.parse(r):null}catch{return null}}
+    function requireSession(){const c=loadSession();if(!c||!c.token||c.role!=='ADMIN'){window.location.href='/index.html';return null}return c}
+    async function api(url,opt={}){const h={'Content-Type':'application/json',...(session?.token?{Authorization:`Bearer ${session.token}`}:{})};const res=await fetch(url,{headers:h,...opt});const data=await res.json().catch(()=>({}));if(!res.ok)throw new Error(data.error||'请求失败');return data}
+    function showMessage(t,ok=true){const m=document.getElementById('message');m.textContent=t;m.className=ok?'alert success':'alert error';m.style.display='block';setTimeout(()=>m.style.display='none',3000)}
+    function openModal(id){document.getElementById(id).classList.add('active')}
+    function closeModal(id){document.getElementById(id).classList.remove('active')}
+    document.querySelectorAll('.tab').forEach(tab=>{tab.addEventListener('click',()=>{document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));document.querySelectorAll('.tab-content').forEach(c=>c.classList.remove('active'));tab.classList.add('active');document.getElementById(tab.dataset.tab+'-content').classList.add('active')})});
+    async function loadUsers(){try{const users=await api('/api/users');const html=`<table><thead><tr><th>ID</th><th>用户名</th><th>姓名</th><th>角色</th><th>状态</th><th>操作</th></tr></thead><tbody>${users.map(u=>`<tr><td>${u.user_id}</td><td>${u.username}</td><td>${u.real_name||'-'}</td><td>${u.role}</td><td><span class="badge ${u.status==='1'?'active':'inactive'}">${u.status==='1'?'启用':'禁用'}</span></td><td><button class="small" onclick="editUser(${u.user_id})">编辑</button> <button class="small danger" onclick="deleteUser(${u.user_id})">禁用</button></td></tr>`).join('')}</tbody></table>`;document.getElementById('usersContainer').innerHTML=html}catch(e){showMessage(e.message,false)}}
+    document.getElementById('addUserBtn').addEventListener('click',()=>{document.getElementById('userModalTitle').textContent='新增用户';document.getElementById('userForm').reset();document.getElementById('userId').value='';document.getElementById('passwordGroup').style.display='block';document.getElementById('password').required=true;openModal('userModal')});
+    async function editUser(id){try{const users=await api('/api/users');const u=users.find(x=>x.user_id===id);if(!u)return;document.getElementById('userModalTitle').textContent='编辑用户';document.getElementById('userId').value=u.user_id;document.getElementById('username').value=u.username;document.getElementById('username').disabled=true;document.getElementById('realName').value=u.real_name||'';document.getElementById('role').value=u.role;document.getElementById('role').disabled=true;document.getElementById('email').value=u.email||'';document.getElementById('mobile').value=u.mobile||'';document.getElementById('status').value=u.status;document.getElementById('passwordGroup').style.display='none';document.getElementById('password').required=false;openModal('userModal')}catch(e){showMessage(e.message,false)}}
+    async function deleteUser(id){if(!confirm('确定禁用?'))return;try{await api(`/api/users/${id}`,{method:'DELETE'});showMessage('已禁用',true);await loadUsers()}catch(e){showMessage(e.message,false)}}
+    document.getElementById('userForm').addEventListener('submit',async(e)=>{e.preventDefault();const uid=document.getElementById('userId').value;const data={username:document.getElementById('username').value,password:document.getElementById('password').value,real_name:document.getElementById('realName').value,role:document.getElementById('role').value,email:document.getElementById('email').value,mobile:document.getElementById('mobile').value,status:document.getElementById('status').value};try{if(uid){await api(`/api/users/${uid}`,{method:'PUT',body:JSON.stringify(data)});showMessage('更新成功',true)}else{await api('/api/users',{method:'POST',body:JSON.stringify(data)});showMessage('创建成功',true)}closeModal('userModal');await loadUsers();document.getElementById('username').disabled=false;document.getElementById('role').disabled=false}catch(e){showMessage(e.message,false)}});
+    async function loadCourses(){try{const courses=await api('/api/courses');const html=`<table><thead><tr><th>课程号</th><th>课程名</th><th>类型</th><th>容量</th><th>已选</th><th>教师</th><th>学期</th><th>状态</th><th>操作</th></tr></thead><tbody>${courses.map(c=>`<tr><td>${c.course_no}</td><td>${c.course_name}</td><td>${c.course_type||'-'}</td><td>${c.capacity}</td><td>${c.selected_num}</td><td>${c.tea_name||'-'}</td><td>${c.term}</td><td><span class="badge ${c.status==='1'?'active':'inactive'}">${c.status==='1'?'启用':'禁用'}</span></td><td><button class="small" onclick="editCourse(${c.course_id})">编辑</button> <button class="small danger" onclick="deleteCourse(${c.course_id})">禁用</button></td></tr>`).join('')}</tbody></table>`;document.getElementById('coursesContainer').innerHTML=html}catch(e){showMessage(e.message,false)}}
+    async function loadDepts(){const depts=await api('/api/departments');document.getElementById('deptId').innerHTML=depts.map(d=>`<option value="${d.dept_id}">${d.dept_name}</option>`).join('')}
+    async function loadTeachers(){const users=await api('/api/users');const teachers=users.filter(u=>u.role==='TEACHER'&&u.tea_id);document.getElementById('teaId').innerHTML=teachers.map(t=>`<option value="${t.tea_id}">${t.tea_name||t.real_name}</option>`).join('')}
+    document.getElementById('addCourseBtn').addEventListener('click',async()=>{document.getElementById('courseModalTitle').textContent='新增课程';document.getElementById('courseForm').reset();document.getElementById('courseId').value='';document.getElementById('courseNo').disabled=false;await loadDepts();await loadTeachers();document.getElementById('term').value=session?.term||'2024-2025-1';openModal('courseModal')});
+    async function editCourse(id){try{const courses=await api('/api/courses');const c=courses.find(x=>x.course_id===id);if(!c)return;await loadDepts();await loadTeachers();document.getElementById('courseModalTitle').textContent='编辑课程';document.getElementById('courseId').value=c.course_id;document.getElementById('courseNo').value=c.course_no;document.getElementById('courseNo').disabled=true;document.getElementById('courseName').value=c.course_name;document.getElementById('courseType').value=c.course_type||'Required';document.getElementById('credit').value=c.credit||'';document.getElementById('period').value=c.period||'';document.getElementById('capacity').value=c.capacity;document.getElementById('courseDesc').value=c.course_desc||'';document.getElementById('dayOfWeek').value=c.day_of_week||'';document.getElementById('startSlot').value=c.start_slot||'';document.getElementById('endSlot').value=c.end_slot||'';document.getElementById('location').value=c.location||'';document.getElementById('term').value=c.term;openModal('courseModal')}catch(e){showMessage(e.message,false)}}
+    async function deleteCourse(id){if(!confirm('确定禁用?'))return;try{await api(`/api/courses/${id}`,{method:'DELETE'});showMessage('已禁用',true);await loadCourses()}catch(e){showMessage(e.message,false)}}
+    document.getElementById('courseForm').addEventListener('submit',async(e)=>{e.preventDefault();const cid=document.getElementById('courseId').value;const data={course_no:document.getElementById('courseNo').value,course_name:document.getElementById('courseName').value,course_type:document.getElementById('courseType').value,credit:parseFloat(document.getElementById('credit').value)||null,period:parseInt(document.getElementById('period').value)||null,dept_id:parseInt(document.getElementById('deptId').value),tea_id:parseInt(document.getElementById('teaId').value),term:document.getElementById('term').value,capacity:parseInt(document.getElementById('capacity').value),course_desc:document.getElementById('courseDesc').value,day_of_week:parseInt(document.getElementById('dayOfWeek').value)||null,start_slot:parseInt(document.getElementById('startSlot').value)||null,end_slot:parseInt(document.getElementById('endSlot').value)||null,location:document.getElementById('location').value};try{if(cid){await api(`/api/courses/${cid}`,{method:'PUT',body:JSON.stringify(data)});showMessage('更新成功',true)}else{await api('/api/courses',{method:'POST',body:JSON.stringify(data)});showMessage('创建成功',true)}closeModal('courseModal');await loadCourses();document.getElementById('courseNo').disabled=false}catch(e){showMessage(e.message,false)}});
+    async function loadConfig(){try{const configs=await api('/api/config');const html=`<table><thead><tr><th>参数键</th><th>参数值</th><th>时间戳值</th><th>备注</th><th>操作</th></tr></thead><tbody>${configs.map(c=>`<tr><td>${c.param_key}</td><td>${c.param_value||'-'}</td><td>${c.param_value_ts||'-'}</td><td>${c.remark||'-'}</td><td><button class="small" onclick="editConfig('${c.param_key}','${c.param_value||''}','${c.param_value_ts||''}')">编辑</button></td></tr>`).join('')}</tbody></table>`;document.getElementById('configContainer').innerHTML=html}catch(e){showMessage(e.message,false)}}
+    async function editConfig(key,value,valueTs){const newValue=prompt(`编辑 ${key}`,value||valueTs);if(newValue===null)return;try{const data={};if(key.includes('TIME')){data.param_value_ts=newValue;data.param_value=null}else{data.param_value=newValue;data.param_value_ts=null}await api(`/api/config/${key}`,{method:'PUT',body:JSON.stringify(data)});showMessage('更新成功',true);await loadConfig()}catch(e){showMessage(e.message,false)}}
+    document.getElementById('logoutBtn').addEventListener('click',()=>{sessionStorage.removeItem(SESSION_KEY);window.location.href='/index.html'});
+    (async function(){session=requireSession();if(!session)return;await loadUsers();await loadCourses();await loadConfig()})();
+  </script>
+</body>
+</html>
