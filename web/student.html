@@ -162,6 +162,7 @@
 <body>
   <header>
     <div class="logo">学生门户</div>
+    <button id="logoutBtn" class="small" style="padding:8px 12px;border-radius:8px;border:none;background:#d97757;color:white;font-weight:700;cursor:pointer;">退出登录</button>
   </header>
 
   <main>
@@ -189,11 +190,8 @@
       </section>
 
       <section class="panel">
-        <div class="flex" style="justify-content: space-between;">
-          <div>
-            <h1 style="margin-bottom:4px;">我的选课</h1>
-          </div>
-          <button id="logoutBtn" class="small">退出登录</button>
+        <div>
+          <h1 style="margin-bottom:4px;">我的选课</h1>
         </div>
         <div id="myCoursesContainer" class="hint">加载中...</div>
         <div id="message" class="alert" style="display:none;"></div>
@@ -369,7 +367,9 @@
 
     async function loadMyCourses() {
       const term = await ensureTerm();
-      const params = new URLSearchParams({ stu_id: session.stu_id });
+      const stuId = parseInt(session.stu_id);
+      if (!stuId || isNaN(stuId)) return;
+      const params = new URLSearchParams({ stu_id: stuId });
       if (term) params.set('term', term);
       const data = await api(`/api/courses/my?${params.toString()}`);
       myCoursesContainer.innerHTML = renderMyCourses(data);
@@ -377,7 +377,9 @@
 
     async function loadWaitlist() {
       const term = await ensureTerm();
-      const params = new URLSearchParams({ stu_id: session.stu_id });
+      const stuId = parseInt(session.stu_id);
+      if (!stuId || isNaN(stuId)) return;
+      const params = new URLSearchParams({ stu_id: stuId });
       if (term) params.set('term', term);
       const data = await api(`/api/waitlist/my?${params.toString()}`);
       waitlistContainer.innerHTML = renderWaitlist(data);
@@ -385,7 +387,9 @@
 
     async function loadTimetable() {
       const term = await ensureTerm();
-      const params = new URLSearchParams({ stu_id: session.stu_id });
+      const stuId = parseInt(session.stu_id);
+      if (!stuId || isNaN(stuId)) return;
+      const params = new URLSearchParams({ stu_id: stuId });
       if (term) params.set('term', term);
       const data = await api(`/api/courses/timetable?${params.toString()}`);
       timetableContainer.innerHTML = renderTimetable(data);
@@ -393,7 +397,9 @@
 
     async function checkConflict(courseId) {
       const term = await ensureTerm();
-      const params = new URLSearchParams({ stu_id: session.stu_id, course_id: courseId });
+      const stuId = parseInt(session.stu_id);
+      if (!stuId || isNaN(stuId)) return [];
+      const params = new URLSearchParams({ stu_id: stuId, course_id: courseId });
       if (term) params.set('term', term);
       const rows = await api(`/api/courses/conflict?${params.toString()}`);
       return (rows || []).filter(r => (r.conflict ?? r.CONFLICT) === true);
@@ -402,14 +408,15 @@
     async function loadStudentProfile() {
       const fallbackName = session?.stu_name || session?.real_name || '-';
       const fallbackAccount = session?.stu_no || session?.username || session?.user_id || '-';
-      if (!session?.stu_id) {
+      const stuId = parseInt(session?.stu_id);
+      if (!stuId || isNaN(stuId)) {
         userInfo.textContent = fallbackAccount;
         studentName.textContent = fallbackName;
         showMessage('未找到学生ID，重新登录以刷新信息', false);
         return;
       }
       try {
-        const data = await api(`/api/students/${session.stu_id}`);
+        const data = await api(`/api/students/${stuId}`);
         const displayName = data.stu_name || data.real_name || fallbackName;
         const stuNo = data.stu_no || session.stu_no || session.stu_id;
         userInfo.textContent = stuNo || data.user_id || session.user_id || '-';
@@ -434,7 +441,12 @@
             const ok = window.confirm(`发现与 ${names} 存在时间冲突，仍要选课吗？`);
             if (!ok) return;
           }
-          const payload = { stu_id: session.stu_id, course_id: courseId };
+          const stuId = parseInt(session.stu_id);
+          if (!stuId || isNaN(stuId)) {
+            showMessage('学生ID无效，请重新登录', false);
+            return;
+          }
+          const payload = { stu_id: stuId, course_id: courseId };
           if (term) payload.term = term;
           const res = await api('/api/select', {
             method: 'POST',
@@ -452,7 +464,12 @@
             if (join) {
               try {
                 const term = await ensureTerm();
-                const payload = { stu_id: session.stu_id, course_id: Number(e.target.dataset.id) };
+                const stuId = parseInt(session.stu_id);
+                if (!stuId || isNaN(stuId)) {
+                  showMessage('学生ID无效，请重新登录', false);
+                  return;
+                }
+                const payload = { stu_id: stuId, course_id: Number(e.target.dataset.id) };
                 if (term) payload.term = term;
                 const res = await api('/api/waitlist/join', {
                   method: 'POST',
@@ -478,7 +495,12 @@
         try {
           const courseId = Number(e.target.dataset.id);
           const term = await ensureTerm();
-          const payload = { stu_id: session.stu_id, course_id: courseId };
+          const stuId = parseInt(session.stu_id);
+          if (!stuId || isNaN(stuId)) {
+            showMessage('学生ID无效，请重新登录', false);
+            return;
+          }
+          const payload = { stu_id: stuId, course_id: courseId };
           if (term) payload.term = term;
           const res = await api('/api/drop', {
             method: 'POST',

@@ -426,6 +426,358 @@ app.get('/api/export/stat', requireAuth(['TEACHER', 'ADMIN']), async (req, res) 
   }
 });
 
+
+// ==================== 管理员 API ====================
+
+// 用户管理：获取用户列表
+app.get('/api/users', requireAuth(['ADMIN']), async (req, res) => {
+  try {
+    const sql = `
+      SELECT u.user_id, u.username, u.real_name, u.role, u.status, u.email, u.mobile, u.create_time,
+             s.stu_id, s.stu_no, s.stu_name,
+             t.tea_id, t.tea_no, t.tea_name
+      FROM tb_user u
+      LEFT JOIN tb_student s ON u.user_id = s.user_id
+      LEFT JOIN tb_teacher t ON u.user_id = t.user_id
+      ORDER BY u.user_id;`;
+    const { rows } = await pool.query(sql);
+    return res.json(rows);
+  } catch (e) {
+    console.error(e);
+    return res.status(500).json({ error: 'fetch users failed' });
+  }
+});
+
+// 用户管理：新增用户
+app.post('/api/users', requireAuth(['ADMIN']), async (req, res) => {
+  const { username, password, real_name, role, email, mobile } = req.body || {};
+  if (!username || !password || !role) {
+    return res.status(400).json({ error: 'missing required fields' });
+  }
+  if (!['ADMIN', 'TEACHER', 'STUDENT'].includes(role)) {
+    return res.status(400).json({ error: 'invalid role' });
+  }
+  try {
+    const sql = `
+      INSERT INTO tb_user (username, password_hash, real_name, role, status, email, mobile)
+      VALUES ($1, FN_HASH_PASSWORD($2), $3, $4, '1', $5, $6)
+      RETURNING user_id, username, real_name, role, status, email, mobile;`;
+    const { rows } = await pool.query(sql, [username, password, real_name, role, email, mobile]);
+    return res.status(201).json(rows[0]);
+  } catch (e) {
+    console.error(e);
+    if (e.code === '23505') {
+      return res.status(409).json({ error: 'username already exists' });
+    }
+    return res.status(500).json({ error: 'create user failed' });
+  }
+});
+
+// 用户管理：更新用户
+app.put('/api/users/:id', requireAuth(['ADMIN']), async (req, res) => {
+  const user_id = Number(req.params.id);
+  const { real_name, email, mobile, status } = req.body || {};
+  if (!user_id) return res.status(400).json({ error: 'invalid user_id' });
+  try {
+    const updates = [];
+    const values = [];
+    let idx = 1;
+    if (real_name !== undefined) { updates.push(`real_name = $${idx++}`); values.push(real_name); }
+    if (email !== undefined) { updates.push(`email = $${idx++}`); values.push(email); }
+    if (mobile !== undefined) { updates.push(`mobile = $${idx++}`); values.push(mobile); }
+    if (status !== undefined) { updates.push(`status = $${idx++}`); values.push(status); }
+    if (!updates.length) return res.status(400).json({ error: 'no fields to update' });
+    values.push(user_id);
+    const sql = `UPDATE tb_user SET ${updates.join(', ')} WHERE user_id = $${idx} RETURNING *;`;
+    const { rows } = await pool.query(sql, values);
+    if (!rows.length) return res.status(404).json({ error: 'user not found' });
+    return res.json(rows[0]);
+  } catch (e) {
+    console.error(e);
+    return res.status(500).json({ error: 'update user failed' });
+  }
+});
+
+// 用户管理：删除用户（软删除，设置status=0）
+app.delete('/api/users/:id', requireAuth(['ADMIN']), async (req, res) => {
+  const user_id = Number(req.params.id);
+  if (!user_id) return res.status(400).json({ error: 'invalid user_id' });
+  try {
+    const sql = `UPDATE tb_user SET status = '0' WHERE user_id = $1 RETURNING user_id, username, status;`;
+    const { rows } = await pool.query(sql, [user_id]);
+    if (!rows.length) return res.status(404).json({ error: 'user not found' });
+    return res.json({ message: 'user disabled', user: rows[0] });
+  } catch (e) {
+    console.error(e);
+    return res.status(500).json({ error: 'delete user failed' });
+  }
+});
+
+// 课程管理：获取所有课程
+app.get('/api/courses', requireAuth(['ADMIN', 'TEACHER']), async (req, res) => {
+  try {
+    const term = req.query.term ? await resolveTerm(req.query.term) : null;
+    let sql = `
+      SELECT c.course_id, c.course_no, c.course_name, c.course_type, c.credit, c.period,
+             c.capacity, c.selected_num, c.term, c.status, c.course_desc,
+             c.day_of_week, c.start_slot, c.end_slot, c.location,
+             d.dept_name, t.tea_name, t.tea_no
+      FROM tb_course c
+      LEFT JOIN tb_department d ON c.dept_id = d.dept_id
+      LEFT JOIN tb_teacher t ON c.tea_id = t.tea_id`;
+    const params = [];
+    if (term) {
+      sql += ' WHERE c.term = $1';
+      params.push(term);
+    }
+    sql += ' ORDER BY c.course_no;';
+    const { rows } = await pool.query(sql, params);
+    return res.json(rows);
+  } catch (e) {
+    console.error(e);
+    return res.status(500).json({ error: 'fetch courses failed' });
+  }
+});
+
+// 课程管理：新增课程
+app.post('/api/courses', requireAuth(['ADMIN']), async (req, res) => {
+  const { course_no, course_name, course_type, credit, period, dept_id, tea_id, term, capacity, course_desc, day_of_week, start_slot, end_slot, location } = req.body || {};
+  if (!course_no || !course_name || !dept_id || !tea_id || !term || !capacity) {
+    return res.status(400).json({ error: 'missing required fields' });
+  }
+  try {
+    const sql = `
+      INSERT INTO tb_course (course_no, course_name, course_type, credit, period, dept_id, tea_id, term, capacity, selected_num, course_desc, status, day_of_week, start_slot, end_slot, location)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 0, $10, '1', $11, $12, $13, $14)
+      RETURNING *;`;
+    const { rows } = await pool.query(sql, [course_no, course_name, course_type, credit, period, dept_id, tea_id, term, capacity, course_desc, day_of_week, start_slot, end_slot, location]);
+    
+    // 如果有时间信息，同时插入到 TB_COURSE_TIME
+    if (rows[0] && day_of_week && start_slot && end_slot) {
+      await pool.query(
+        'INSERT INTO tb_course_time (course_id, term, day_of_week, start_slot, end_slot, location) VALUES ($1, $2, $3, $4, $5, $6);',
+        [rows[0].course_id, term, day_of_week, start_slot, end_slot, location]
+      );
+    }
+    
+    return res.status(201).json(rows[0]);
+  } catch (e) {
+    console.error(e);
+    if (e.code === '23505') {
+      return res.status(409).json({ error: 'course already exists' });
+    }
+    return res.status(500).json({ error: 'create course failed' });
+  }
+});
+
+// 课程管理：更新课程
+app.put('/api/courses/:id', requireAuth(['ADMIN']), async (req, res) => {
+  const course_id = Number(req.params.id);
+  const { course_name, course_type, credit, period, capacity, course_desc, status, day_of_week, start_slot, end_slot, location } = req.body || {};
+  if (!course_id) return res.status(400).json({ error: 'invalid course_id' });
+  try {
+    const updates = [];
+    const values = [];
+    let idx = 1;
+    if (course_name !== undefined) { updates.push(`course_name = $${idx++}`); values.push(course_name); }
+    if (course_type !== undefined) { updates.push(`course_type = $${idx++}`); values.push(course_type); }
+    if (credit !== undefined) { updates.push(`credit = $${idx++}`); values.push(credit); }
+    if (period !== undefined) { updates.push(`period = $${idx++}`); values.push(period); }
+    if (capacity !== undefined) { updates.push(`capacity = $${idx++}`); values.push(capacity); }
+    if (course_desc !== undefined) { updates.push(`course_desc = $${idx++}`); values.push(course_desc); }
+    if (status !== undefined) { updates.push(`status = $${idx++}`); values.push(status); }
+    if (day_of_week !== undefined) { updates.push(`day_of_week = $${idx++}`); values.push(day_of_week); }
+    if (start_slot !== undefined) { updates.push(`start_slot = $${idx++}`); values.push(start_slot); }
+    if (end_slot !== undefined) { updates.push(`end_slot = $${idx++}`); values.push(end_slot); }
+    if (location !== undefined) { updates.push(`location = $${idx++}`); values.push(location); }
+    if (!updates.length) return res.status(400).json({ error: 'no fields to update' });
+    values.push(course_id);
+    const sql = `UPDATE tb_course SET ${updates.join(', ')} WHERE course_id = $${idx} RETURNING *;`;
+    const { rows } = await pool.query(sql, values);
+    if (!rows.length) return res.status(404).json({ error: 'course not found' });
+    return res.json(rows[0]);
+  } catch (e) {
+    console.error(e);
+    return res.status(500).json({ error: 'update course failed' });
+  }
+});
+
+// 课程管理：删除课程（软删除）
+app.delete('/api/courses/:id', requireAuth(['ADMIN']), async (req, res) => {
+  const course_id = Number(req.params.id);
+  if (!course_id) return res.status(400).json({ error: 'invalid course_id' });
+  try {
+    const sql = `UPDATE tb_course SET status = '0' WHERE course_id = $1 RETURNING course_id, course_no, course_name, status;`;
+    const { rows } = await pool.query(sql, [course_id]);
+    if (!rows.length) return res.status(404).json({ error: 'course not found' });
+    return res.json({ message: 'course disabled', course: rows[0] });
+  } catch (e) {
+    console.error(e);
+    return res.status(500).json({ error: 'delete course failed' });
+  }
+});
+
+// 学院管理：获取学院列表
+app.get('/api/departments', async (_req, res) => {
+  try {
+    const sql = `SELECT dept_id, dept_code, dept_name, status FROM tb_department ORDER BY dept_id;`;
+    const { rows } = await pool.query(sql);
+    return res.json(rows);
+  } catch (e) {
+    console.error(e);
+    return res.status(500).json({ error: 'fetch departments failed' });
+  }
+});
+
+// 专业管理：获取专业列表
+app.get('/api/majors', async (req, res) => {
+  try {
+    const dept_id = req.query.dept_id ? Number(req.query.dept_id) : null;
+    let sql = `
+      SELECT m.major_id, m.major_code, m.major_name, m.dept_id, m.status, d.dept_name
+      FROM tb_major m
+      LEFT JOIN tb_department d ON m.dept_id = d.dept_id`;
+    const params = [];
+    if (dept_id) {
+      sql += ' WHERE m.dept_id = $1';
+      params.push(dept_id);
+    }
+    sql += ' ORDER BY m.major_id;';
+    const { rows } = await pool.query(sql, params);
+    return res.json(rows);
+  } catch (e) {
+    console.error(e);
+    return res.status(500).json({ error: 'fetch majors failed' });
+  }
+});
+
+// 系统参数：获取所有参数
+app.get('/api/config', requireAuth(['ADMIN']), async (_req, res) => {
+  try {
+    const sql = `SELECT param_key, param_value, param_value_ts, remark FROM tb_sys_param ORDER BY param_key;`;
+    const { rows } = await pool.query(sql);
+    return res.json(rows);
+  } catch (e) {
+    console.error(e);
+    return res.status(500).json({ error: 'fetch config failed' });
+  }
+});
+
+// 系统参数：更新参数
+app.put('/api/config/:key', requireAuth(['ADMIN']), async (req, res) => {
+  const param_key = req.params.key;
+  const { param_value, param_value_ts } = req.body || {};
+  if (!param_key) return res.status(400).json({ error: 'invalid param_key' });
+  try {
+    const sql = `
+      UPDATE tb_sys_param 
+      SET param_value = $1, param_value_ts = $2
+      WHERE param_key = $3
+      RETURNING *;`;
+    const { rows } = await pool.query(sql, [param_value, param_value_ts, param_key]);
+    if (!rows.length) {
+      // 如果不存在则插入
+      const insertSql = `INSERT INTO tb_sys_param (param_key, param_value, param_value_ts) VALUES ($1, $2, $3) RETURNING *;`;
+      const { rows: insertRows } = await pool.query(insertSql, [param_key, param_value, param_value_ts]);
+      return res.status(201).json(insertRows[0]);
+    }
+    return res.json(rows[0]);
+  } catch (e) {
+    console.error(e);
+    return res.status(500).json({ error: 'update config failed' });
+  }
+});
+
+// ==================== 教师 API ====================
+
+// 教师：获取课程选课学生名单
+app.get('/api/courses/:id/students', requireAuth(['TEACHER', 'ADMIN']), async (req, res) => {
+  const course_id = Number(req.params.id);
+  if (!course_id) return res.status(400).json({ error: 'invalid course_id' });
+  try {
+    const term = await resolveTerm(req.query.term);
+    const sql = `
+      SELECT sc.sc_id, sc.stu_id, sc.select_time, sc.grade, sc.status,
+             s.stu_no, s.stu_name, s.gender, s.grade AS stu_grade,
+             d.dept_name, m.major_name
+      FROM tb_student_course sc
+      JOIN tb_student s ON sc.stu_id = s.stu_id
+      LEFT JOIN tb_department d ON s.dept_id = d.dept_id
+      LEFT JOIN tb_major m ON s.major_id = m.major_id
+      WHERE sc.course_id = $1 AND sc.term = $2 AND sc.status = '1'
+      ORDER BY s.stu_no;`;
+    const { rows } = await pool.query(sql, [course_id, term]);
+    return res.json(rows);
+  } catch (e) {
+    console.error(e);
+    return res.status(500).json({ error: 'fetch students failed' });
+  }
+});
+
+// 教师：录入/更新成绩
+app.put('/api/grades/:sc_id', requireAuth(['TEACHER', 'ADMIN']), async (req, res) => {
+  const sc_id = Number(req.params.sc_id);
+  const { grade } = req.body || {};
+  if (!sc_id) return res.status(400).json({ error: 'invalid sc_id' });
+  if (grade === undefined || grade === null) return res.status(400).json({ error: 'missing grade' });
+  if (grade < 0 || grade > 100) return res.status(400).json({ error: 'grade must be between 0 and 100' });
+  try {
+    const sql = `UPDATE tb_student_course SET grade = $1 WHERE sc_id = $2 RETURNING *;`;
+    const { rows } = await pool.query(sql, [grade, sc_id]);
+    if (!rows.length) return res.status(404).json({ error: 'record not found' });
+    return res.json(rows[0]);
+  } catch (e) {
+    console.error(e);
+    return res.status(500).json({ error: 'update grade failed' });
+  }
+});
+
+// 教师：获取教师信息
+app.get('/api/teachers/:id', requireAuth(['TEACHER', 'ADMIN']), async (req, res) => {
+  const tea_id = Number(req.params.id);
+  if (!tea_id) return res.status(400).json({ error: 'invalid tea_id' });
+  try {
+    const sql = `
+      SELECT t.tea_id, t.tea_no, t.tea_name, t.gender, t.title, t.mobile, t.email, t.status,
+             d.dept_name, u.username, u.real_name
+      FROM tb_teacher t
+      LEFT JOIN tb_department d ON t.dept_id = d.dept_id
+      LEFT JOIN tb_user u ON t.user_id = u.user_id
+      WHERE t.tea_id = $1;`;
+    const { rows } = await pool.query(sql, [tea_id]);
+    if (!rows.length) return res.status(404).json({ error: 'teacher not found' });
+    return res.json(rows[0]);
+  } catch (e) {
+    console.error(e);
+    return res.status(500).json({ error: 'fetch teacher failed' });
+  }
+});
+
+// 教师：获取我的授课课程
+app.get('/api/teachers/:id/courses', requireAuth(['TEACHER', 'ADMIN']), async (req, res) => {
+  const tea_id = Number(req.params.id);
+  if (!tea_id) return res.status(400).json({ error: 'invalid tea_id' });
+  try {
+    const term = req.query.term ? await resolveTerm(req.query.term) : null;
+    let sql = `
+      SELECT c.course_id, c.course_no, c.course_name, c.course_type, c.credit,
+             c.capacity, c.selected_num, c.term, c.status
+      FROM tb_course c
+      WHERE c.tea_id = $1`;
+    const params = [tea_id];
+    if (term) {
+      sql += ' AND c.term = $2';
+      params.push(term);
+    }
+    sql += ' ORDER BY c.course_no;';
+    const { rows } = await pool.query(sql, params);
+    return res.json(rows);
+  } catch (e) {
+    console.error(e);
+    return res.status(500).json({ error: 'fetch teacher courses failed' });
+  }
+});
+
 app.get('/', (_req, res) => {
   res.sendFile(path.join(webDir, 'index.html'));
 });
